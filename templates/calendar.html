@@ -1,0 +1,266 @@
+{% extends "base.html" %}
+{% block title %}Dividend Calendar — OsloBørsen{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
+
+  <!-- Header -->
+  <div class="mb-8">
+    <div class="flex items-center gap-3 mb-2">
+      <div class="w-1 h-8 bg-brand-500 rounded-full"></div>
+      <h1 class="text-3xl font-bold text-white tracking-tight">Dividend Calendar</h1>
+    </div>
+    <p class="text-gray-400 ml-4 text-sm">Upcoming ex-dividend dates for Oslo Børs stocks</p>
+  </div>
+
+  <!-- ── Summary Stats ────────────────────────────────────── -->
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+    <div class="card p-4 text-center">
+      <div id="cal-total" class="text-2xl font-bold text-white skeleton-text">—</div>
+      <div class="text-xs text-gray-500 mt-1">Upcoming Events</div>
+    </div>
+    <div class="card p-4 text-center">
+      <div id="cal-next-30" class="text-2xl font-bold text-brand-400 skeleton-text">—</div>
+      <div class="text-xs text-gray-500 mt-1">Next 30 Days</div>
+    </div>
+    <div class="card p-4 text-center">
+      <div id="cal-avg-yield" class="text-2xl font-bold text-up skeleton-text">—</div>
+      <div class="text-xs text-gray-500 mt-1">Avg Dividend Yield</div>
+    </div>
+    <div class="card p-4 text-center">
+      <div id="cal-next-name" class="text-lg font-bold text-white skeleton-text truncate">—</div>
+      <div class="text-xs text-gray-500 mt-1">Next Ex-Date Stock</div>
+    </div>
+  </div>
+
+  <!-- ── Timeline View ────────────────────────────────────── -->
+  <div class="card p-6 mb-6">
+    <div class="flex items-center justify-between mb-6">
+      <h2 class="text-white font-semibold">Upcoming Ex-Dividend Dates</h2>
+      <div class="flex items-center gap-2">
+        <input id="cal-search" type="text" placeholder="Filter by name…"
+               class="input-field text-sm" style="width:200px" />
+      </div>
+    </div>
+
+    <!-- Month group container -->
+    <div id="calendar-timeline" class="space-y-8">
+      <!-- Skeleton -->
+      <div class="space-y-3">
+        <div class="skeleton h-5 w-32 rounded"></div>
+        <div class="skeleton h-14 rounded-xl"></div>
+        <div class="skeleton h-14 rounded-xl"></div>
+        <div class="skeleton h-14 rounded-xl"></div>
+      </div>
+    </div>
+
+    <div id="cal-empty" class="hidden py-16 text-center text-gray-500">
+      <svg class="w-12 h-12 mx-auto mb-3 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+          d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+      </svg>
+      <p>No upcoming dividend events found.</p>
+    </div>
+  </div>
+
+  <!-- ── Table view ────────────────────────────────────────── -->
+  <div class="card overflow-hidden">
+    <div class="p-5 border-b border-surface-600">
+      <h2 class="text-white font-semibold text-sm">Full List</h2>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full min-w-[600px]">
+        <thead>
+          <tr class="text-left border-b border-surface-600">
+            <th class="th-cell">Company</th>
+            <th class="th-cell">Sector</th>
+            <th class="th-cell">Ex-Dividend Date</th>
+            <th class="th-cell">Dividend Rate</th>
+            <th class="th-cell">Current Yield</th>
+            <th class="th-cell">Days Until</th>
+          </tr>
+        </thead>
+        <tbody id="cal-table-body">
+          {% for _ in range(6) %}
+          <tr class="border-b border-surface-700">
+            {% for _ in range(6) %}
+            <td class="px-4 py-3"><div class="skeleton h-4 rounded"></div></td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let calEvents = [];
+
+(async () => {
+  try {
+    const res = await fetch('/api/calendar');
+    calEvents = await res.json();
+    if (!Array.isArray(calEvents)) calEvents = [];
+  } catch(e) {
+    calEvents = [];
+  }
+  populateStats();
+  renderTimeline(calEvents);
+  renderTable(calEvents);
+})();
+
+document.getElementById('cal-search').addEventListener('input', e => {
+  const q = e.target.value.toLowerCase().trim();
+  const filtered = q
+    ? calEvents.filter(ev => ev.name.toLowerCase().includes(q) || ev.ticker.toLowerCase().includes(q))
+    : calEvents;
+  renderTimeline(filtered);
+  renderTable(filtered);
+});
+
+function populateStats() {
+  document.getElementById('cal-total').textContent = calEvents.length;
+
+  const today    = new Date(); today.setHours(0,0,0,0);
+  const in30days = new Date(today); in30days.setDate(today.getDate()+30);
+  const next30   = calEvents.filter(e => {
+    const d = new Date(e.ex_date); return d >= today && d <= in30days;
+  });
+  document.getElementById('cal-next-30').textContent = next30.length;
+
+  const yields  = calEvents.filter(e => e.div_yield != null).map(e => e.div_yield);
+  const avgYield = yields.length ? (yields.reduce((a,b)=>a+b,0)/yields.length).toFixed(2) : '—';
+  document.getElementById('cal-avg-yield').textContent = avgYield !== '—' ? avgYield+'%' : '—';
+
+  const nextEv = calEvents[0];
+  if (nextEv) {
+    document.getElementById('cal-next-name').textContent = nextEv.name || nextEv.ticker;
+  }
+}
+
+function renderTimeline(events) {
+  const container = document.getElementById('calendar-timeline');
+  const empty     = document.getElementById('cal-empty');
+
+  if (!events.length) {
+    container.innerHTML = '';
+    empty.classList.remove('hidden');
+    return;
+  }
+  empty.classList.add('hidden');
+
+  const today = new Date(); today.setHours(0,0,0,0);
+
+  // Group by month
+  const months = {};
+  for (const ev of events) {
+    const d   = new Date(ev.ex_date);
+    const key = d.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+    if (!months[key]) months[key] = [];
+    months[key].push(ev);
+  }
+
+  container.innerHTML = Object.entries(months).map(([month, evs]) => `
+    <div>
+      <div class="flex items-center gap-3 mb-3">
+        <h3 class="text-white font-semibold text-sm">${month}</h3>
+        <div class="flex-1 h-px bg-surface-600"></div>
+        <span class="text-xs text-gray-500">${evs.length} event${evs.length!==1?'s':''}</span>
+      </div>
+      <div class="space-y-2">
+        ${evs.map(ev => {
+          const d        = new Date(ev.ex_date);
+          const daysLeft = Math.round((d-today)/(1000*60*60*24));
+          const isImm    = daysLeft <= 7;
+          const dayStr   = d.toLocaleDateString('en-GB',{weekday:'short',day:'2-digit',month:'short'});
+          return `
+            <a href="/stock/${ev.ticker}"
+               class="flex items-center gap-4 p-4 rounded-xl border ${isImm ? 'border-up/30 bg-up/5' : 'border-surface-600 bg-surface-700/50'} hover:border-brand-500/50 hover:bg-surface-600/50 transition-all group">
+              <!-- Date badge -->
+              <div class="w-14 text-center shrink-0">
+                <div class="text-xs text-gray-500">${d.toLocaleDateString('en-GB',{weekday:'short'})}</div>
+                <div class="text-xl font-bold text-white leading-tight">${d.getDate()}</div>
+                <div class="text-xs text-gray-500">${d.toLocaleDateString('en-GB',{month:'short'})}</div>
+              </div>
+              <!-- Divider -->
+              <div class="w-px h-10 bg-surface-500 shrink-0"></div>
+              <!-- Company -->
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2">
+                  <span class="text-white font-medium text-sm group-hover:text-brand-400 transition-colors">${escHtml(ev.name)}</span>
+                  <span class="text-xs font-mono text-gray-500">${escHtml(ev.ticker)}</span>
+                  ${isImm ? '<span class="text-xs bg-up/20 text-up px-1.5 py-0.5 rounded-full border border-up/30">Soon</span>' : ''}
+                </div>
+                <div class="text-xs text-gray-500 mt-0.5">${ev.sector}</div>
+              </div>
+              <!-- Metrics -->
+              <div class="flex items-center gap-6 shrink-0">
+                <div class="text-right hidden sm:block">
+                  <div class="text-xs text-gray-500">Rate</div>
+                  <div class="text-sm font-mono text-white">
+                    ${ev.div_rate != null ? ev.div_rate.toFixed(2)+' '+ev.currency : '—'}
+                  </div>
+                </div>
+                <div class="text-right hidden sm:block">
+                  <div class="text-xs text-gray-500">Yield</div>
+                  <div class="text-sm font-mono ${ev.div_yield ? 'text-up' : 'text-gray-500'}">
+                    ${ev.div_yield != null ? ev.div_yield.toFixed(2)+'%' : '—'}
+                  </div>
+                </div>
+                <div class="text-right">
+                  <div class="text-xs text-gray-500">Days</div>
+                  <div class="text-sm font-bold ${daysLeft<=7 ? 'text-up' : daysLeft<=30 ? 'text-yellow-400' : 'text-gray-400'}">
+                    ${daysLeft}
+                  </div>
+                </div>
+              </div>
+            </a>`;
+        }).join('')}
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderTable(events) {
+  const tbody = document.getElementById('cal-table-body');
+  const today = new Date(); today.setHours(0,0,0,0);
+
+  if (!events.length) {
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center py-8 text-gray-500">No events found.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = events.map(ev => {
+    const d        = new Date(ev.ex_date);
+    const daysLeft = Math.round((d-today)/(1000*60*60*24));
+    const daysCls  = daysLeft <= 7 ? 'text-up font-semibold' : daysLeft <= 30 ? 'text-yellow-400' : 'text-gray-400';
+    return `
+      <tr class="border-b border-surface-700 hover:bg-surface-700/40 transition-colors cursor-pointer"
+          onclick="window.location.href='/stock/${ev.ticker}'">
+        <td class="px-4 py-3">
+          <div class="text-sm font-medium text-white">${escHtml(ev.name)}</div>
+          <div class="text-xs text-gray-500 font-mono">${escHtml(ev.ticker)}</div>
+        </td>
+        <td class="px-4 py-3 text-sm text-gray-400">${escHtml(ev.sector)}</td>
+        <td class="px-4 py-3 text-sm font-mono text-white">${d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})}</td>
+        <td class="px-4 py-3 text-sm font-mono text-gray-300">
+          ${ev.div_rate != null ? ev.div_rate.toFixed(2)+' '+ev.currency : '<span class="text-gray-600">—</span>'}
+        </td>
+        <td class="px-4 py-3 text-sm font-mono ${ev.div_yield ? 'text-up' : 'text-gray-600'}">
+          ${ev.div_yield != null ? ev.div_yield.toFixed(2)+'%' : '—'}
+        </td>
+        <td class="px-4 py-3 text-sm font-mono ${daysCls}">${daysLeft}d</td>
+      </tr>`;
+  }).join('');
+}
+
+function escHtml(str) {
+  return String(str ?? '').replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+</script>
+{% endblock %}

@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Not Found — OsloBørsen{% endblock %}
+{% block content %}
+<div class="flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
+  <div class="text-8xl font-bold text-surface-500 mb-4">404</div>
+  <h1 class="text-2xl font-bold text-white mb-2">Page not found</h1>
+  <p class="text-gray-400 mb-8">The stock or page you're looking for doesn't exist in our universe.</p>
+  <div class="flex gap-3">
+    <a href="/" class="btn-primary">Go to Dashboard</a>
+    <a href="/screener" class="btn-secondary">Open Screener</a>
+  </div>
+</div>
+{% endblock %}

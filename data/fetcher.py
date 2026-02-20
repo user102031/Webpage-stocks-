@@ -1,0 +1,521 @@
+"""
+Data fetcher — wraps yfinance calls with caching and graceful error handling.
+All public functions return plain Python dicts/lists (JSON-serialisable).
+"""
+
+import logging
+import math
+from datetime import datetime, timedelta
+from typing import Optional
+
+import yfinance as yf
+
+from data import cache
+from data.stocks import OSLO_STOCKS, TICKER_MAP
+
+logger = logging.getLogger(__name__)
+
+
+# ────────────────────────────────────────────────────────────
+# Helpers
+# ────────────────────────────────────────────────────────────
+
+def _safe(val, default=None):
+    """Return val if it is a real number, else default."""
+    if val is None:
+        return default
+    try:
+        if math.isnan(float(val)) or math.isinf(float(val)):
+            return default
+        return val
+    except (TypeError, ValueError):
+        return default
+
+
+def _fmt_large(num) -> Optional[str]:
+    """Format large numbers as e.g. '12.3B', '450M'."""
+    if num is None:
+        return None
+    try:
+        num = float(num)
+        if num >= 1e12:
+            return f"{num/1e12:.2f}T"
+        if num >= 1e9:
+            return f"{num/1e9:.2f}B"
+        if num >= 1e6:
+            return f"{num/1e6:.2f}M"
+        if num >= 1e3:
+            return f"{num/1e3:.2f}K"
+        return f"{num:.2f}"
+    except (TypeError, ValueError):
+        return None
+
+
+def _pct(val) -> Optional[float]:
+    """Convert a decimal ratio to percentage rounded to 2 dp."""
+    v = _safe(val)
+    return round(v * 100, 2) if v is not None else None
+
+
+# ────────────────────────────────────────────────────────────
+# Single ticker quote / info
+# ────────────────────────────────────────────────────────────
+
+def get_quote(ticker: str) -> dict:
+    """
+    Fetch a fast-expiring summary for one ticker.
+    Returns a dict with price, change, dividend yield, P/E, etc.
+    """
+    cache_key = f"quote:{ticker}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    meta = TICKER_MAP.get(ticker, {})
+    result = {
+        "ticker":         ticker,
+        "name":           meta.get("name", ticker),
+        "sector":         meta.get("sector", "Unknown"),
+        "price":          None,
+        "currency":       "NOK",
+        "change_pct":     None,
+        "dividend_yield": None,
+        "pe_ratio":       None,
+        "pb_ratio":       None,
+        "eps":            None,
+        "market_cap":     None,
+        "market_cap_fmt": None,
+        "week52_high":    None,
+        "week52_low":     None,
+        "volume":         None,
+        "avg_volume":     None,
+        "score":          None,
+        "error":          None,
+    }
+
+    try:
+        tk = yf.Ticker(ticker)
+        info = tk.info or {}
+
+        result["price"]          = _safe(info.get("currentPrice") or info.get("regularMarketPrice"))
+        result["currency"]       = info.get("currency", "NOK")
+        result["change_pct"]     = _safe(info.get("regularMarketChangePercent"))
+        result["dividend_yield"] = _pct(info.get("dividendYield"))
+        result["pe_ratio"]       = _safe(info.get("trailingPE") or info.get("forwardPE"))
+        result["pb_ratio"]       = _safe(info.get("priceToBook"))
+        result["eps"]            = _safe(info.get("trailingEps"))
+        result["market_cap"]     = _safe(info.get("marketCap"))
+        result["market_cap_fmt"] = _fmt_large(result["market_cap"])
+        result["week52_high"]    = _safe(info.get("fiftyTwoWeekHigh"))
+        result["week52_low"]     = _safe(info.get("fiftyTwoWeekLow"))
+        result["volume"]         = _safe(info.get("volume"))
+        result["avg_volume"]     = _safe(info.get("averageVolume"))
+        result["score"]          = _compute_score(result)
+
+    except Exception as exc:
+        logger.warning("Quote fetch failed for %s: %s", ticker, exc)
+        result["error"] = str(exc)
+
+    cache.set(cache_key, result, ttl=cache.TTL_QUOTE)
+    return result
+
+
+def _compute_score(data: dict) -> Optional[int]:
+    """
+    Composite score 0-100 weighting dividend yield, P/E, and P/B.
+    Higher = more attractive from a value-dividend perspective.
+    """
+    score = 0
+    components = 0
+
+    dy = data.get("dividend_yield")
+    if dy is not None:
+        # Yield up to 10 % = 0-40 pts
+        score += min(dy / 10 * 40, 40)
+        components += 1
+
+    pe = data.get("pe_ratio")
+    if pe is not None and pe > 0:
+        # Lower P/E is better: P/E ≤ 10 → 30 pts, P/E ≥ 30 → 0 pts
+        score += max(0, min(30, (30 - pe) / 20 * 30))
+        components += 1
+
+    pb = data.get("pb_ratio")
+    if pb is not None and pb > 0:
+        # Lower P/B is better: P/B ≤ 1 → 30 pts, P/B ≥ 5 → 0 pts
+        score += max(0, min(30, (5 - pb) / 4 * 30))
+        components += 1
+
+    if components == 0:
+        return None
+    # Normalise to 0-100
+    return round(score)
+
+
+# ────────────────────────────────────────────────────────────
+# Screener — all stocks
+# ────────────────────────────────────────────────────────────
+
+def get_screener_data() -> list[dict]:
+    """
+    Return quotes for every stock in the Oslo universe.
+    Results are cached as a whole for TTL_SCREENER seconds.
+    """
+    cache_key = "screener:all"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    results = []
+    for stock in OSLO_STOCKS:
+        ticker = stock["ticker"]
+        try:
+            q = get_quote(ticker)
+            results.append(q)
+        except Exception as exc:
+            logger.warning("Screener skip %s: %s", ticker, exc)
+            results.append({
+                "ticker": ticker,
+                "name":   stock["name"],
+                "sector": stock["sector"],
+                "error":  str(exc),
+            })
+
+    cache.set(cache_key, results, ttl=cache.TTL_SCREENER)
+    return results
+
+
+# ────────────────────────────────────────────────────────────
+# Price history
+# ────────────────────────────────────────────────────────────
+
+PERIOD_MAP = {
+    "1W": ("7d",  "1h"),
+    "1M": ("1mo", "1d"),
+    "3M": ("3mo", "1d"),
+    "1Y": ("1y",  "1wk"),
+    "5Y": ("5y",  "1mo"),
+}
+
+
+def get_price_history(ticker: str, period: str = "1Y") -> dict:
+    """
+    Return OHLCV history for charting.
+    period: one of 1W, 1M, 3M, 1Y, 5Y
+    """
+    cache_key = f"history:{ticker}:{period}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    yf_period, interval = PERIOD_MAP.get(period, ("1y", "1d"))
+
+    try:
+        tk = yf.Ticker(ticker)
+        df = tk.history(period=yf_period, interval=interval)
+
+        if df is None or df.empty:
+            result = {"ticker": ticker, "period": period, "data": [], "error": "No data"}
+        else:
+            df = df.reset_index()
+            # Column name differs by interval
+            date_col = "Datetime" if "Datetime" in df.columns else "Date"
+            result = {
+                "ticker": ticker,
+                "period": period,
+                "data": [
+                    {
+                        "x": row[date_col].isoformat() if hasattr(row[date_col], "isoformat") else str(row[date_col]),
+                        "o": round(float(row["Open"]),  2),
+                        "h": round(float(row["High"]),  2),
+                        "l": round(float(row["Low"]),   2),
+                        "c": round(float(row["Close"]), 2),
+                        "v": int(row["Volume"]),
+                    }
+                    for _, row in df.iterrows()
+                ],
+                "error": None,
+            }
+    except Exception as exc:
+        logger.warning("History fetch failed for %s %s: %s", ticker, period, exc)
+        result = {"ticker": ticker, "period": period, "data": [], "error": str(exc)}
+
+    cache.set(cache_key, result, ttl=cache.TTL_HISTORY)
+    return result
+
+
+# ────────────────────────────────────────────────────────────
+# Dividend history
+# ────────────────────────────────────────────────────────────
+
+def get_dividend_history(ticker: str) -> dict:
+    """Return annual dividend totals for bar chart."""
+    cache_key = f"dividends:{ticker}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    try:
+        tk = yf.Ticker(ticker)
+        divs = tk.dividends
+
+        if divs is None or divs.empty:
+            result = {"ticker": ticker, "annual": [], "raw": [], "error": None}
+        else:
+            # Group by year
+            divs.index = divs.index.tz_localize(None) if divs.index.tzinfo else divs.index
+            annual = (
+                divs.groupby(divs.index.year)
+                .sum()
+                .reset_index()
+                .rename(columns={"index": "year", "Dividends": "total"})
+            )
+            result = {
+                "ticker": ticker,
+                "annual": [
+                    {"year": int(row["year"]), "total": round(float(row["total"]), 4)}
+                    for _, row in annual.iterrows()
+                ],
+                "raw": [
+                    {"date": str(idx.date()), "amount": round(float(val), 4)}
+                    for idx, val in divs.items()
+                ],
+                "error": None,
+            }
+    except Exception as exc:
+        logger.warning("Dividend fetch failed for %s: %s", ticker, exc)
+        result = {"ticker": ticker, "annual": [], "raw": [], "error": str(exc)}
+
+    cache.set(cache_key, result, ttl=cache.TTL_FINANCIALS)
+    return result
+
+
+# ────────────────────────────────────────────────────────────
+# Financials: Income statement + Cash flow
+# ────────────────────────────────────────────────────────────
+
+def get_financials(ticker: str) -> dict:
+    """Return annual income statement and cash flow data."""
+    cache_key = f"financials:{ticker}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    result = {
+        "ticker":   ticker,
+        "annual":   [],
+        "quarterly": [],
+        "error":    None,
+    }
+
+    try:
+        tk = yf.Ticker(ticker)
+
+        def _parse_stmt(df):
+            if df is None or df.empty:
+                return []
+            rows = []
+            for col in df.columns:
+                label = col.strftime("%Y") if hasattr(col, "strftime") else str(col)
+                revenue     = _safe(df.loc["Total Revenue", col]) if "Total Revenue" in df.index else None
+                net_income  = _safe(df.loc["Net Income", col])    if "Net Income"    in df.index else None
+                rows.append({
+                    "period":       label,
+                    "revenue":      revenue,
+                    "revenue_fmt":  _fmt_large(revenue),
+                    "net_income":   net_income,
+                    "ni_fmt":       _fmt_large(net_income),
+                })
+            return rows
+
+        def _parse_cf(df):
+            if df is None or df.empty:
+                return {}
+            fcf_map = {}
+            for col in df.columns:
+                label = col.strftime("%Y") if hasattr(col, "strftime") else str(col)
+                fcf = None
+                if "Free Cash Flow" in df.index:
+                    fcf = _safe(df.loc["Free Cash Flow", col])
+                elif "Operating Cash Flow" in df.index and "Capital Expenditure" in df.index:
+                    op  = _safe(df.loc["Operating Cash Flow", col])
+                    cap = _safe(df.loc["Capital Expenditure", col])
+                    if op is not None and cap is not None:
+                        fcf = op - abs(cap)
+                fcf_map[label] = {"fcf": fcf, "fcf_fmt": _fmt_large(fcf)}
+            return fcf_map
+
+        ann_inc = _parse_stmt(tk.income_stmt)
+        ann_cf  = _parse_cf(tk.cash_flow)
+
+        for row in ann_inc:
+            cf_data = ann_cf.get(row["period"], {})
+            row.update(cf_data)
+
+        result["annual"] = ann_inc
+
+        # Quarterly
+        q_inc = _parse_stmt(tk.quarterly_income_stmt)
+        q_cf  = _parse_cf(tk.quarterly_cash_flow)
+        for row in q_inc:
+            row["period"] = col.strftime("%Y-Q%q") if False else row["period"]
+            cf_data = q_cf.get(row["period"], {})
+            row.update(cf_data)
+        result["quarterly"] = q_inc
+
+    except Exception as exc:
+        logger.warning("Financials fetch failed for %s: %s", ticker, exc)
+        result["error"] = str(exc)
+
+    cache.set(cache_key, result, ttl=cache.TTL_FINANCIALS)
+    return result
+
+
+# ────────────────────────────────────────────────────────────
+# Dividend calendar
+# ────────────────────────────────────────────────────────────
+
+def get_dividend_calendar() -> list[dict]:
+    """
+    Collect upcoming ex-dividend and payment dates across the universe.
+    Returns list sorted by ex-date.
+    """
+    cache_key = "calendar:all"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    events = []
+    today = datetime.utcnow().date()
+    cutoff = today + timedelta(days=365)
+
+    for stock in OSLO_STOCKS:
+        ticker = stock["ticker"]
+        try:
+            tk = yf.Ticker(ticker)
+            info = tk.info or {}
+
+            ex_date_ts = info.get("exDividendDate")
+            div_rate   = _safe(info.get("dividendRate"))
+            div_yield  = _pct(info.get("dividendYield"))
+
+            if ex_date_ts:
+                ex_date = datetime.utcfromtimestamp(ex_date_ts).date()
+                if ex_date >= today:
+                    events.append({
+                        "ticker":    ticker,
+                        "name":      stock["name"],
+                        "sector":    stock["sector"],
+                        "ex_date":   str(ex_date),
+                        "div_rate":  div_rate,
+                        "div_yield": div_yield,
+                        "currency":  info.get("currency", "NOK"),
+                    })
+        except Exception as exc:
+            logger.debug("Calendar skip %s: %s", ticker, exc)
+
+    events.sort(key=lambda e: e["ex_date"])
+    cache.set(cache_key, events, ttl=cache.TTL_CALENDAR)
+    return events
+
+
+# ────────────────────────────────────────────────────────────
+# Market summary (dashboard)
+# ────────────────────────────────────────────────────────────
+
+def get_market_summary() -> dict:
+    """
+    Return top-5 by yield, top-5 by lowest P/E, and a naive sentiment.
+    """
+    cache_key = "market:summary"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    all_stocks = get_screener_data()
+    valid = [s for s in all_stocks if not s.get("error") and s.get("price")]
+
+    # Top 5 highest dividend yield
+    by_yield = sorted(
+        [s for s in valid if s.get("dividend_yield") is not None],
+        key=lambda s: s["dividend_yield"],
+        reverse=True,
+    )[:5]
+
+    # Top 5 lowest P/E (> 0)
+    by_pe = sorted(
+        [s for s in valid if s.get("pe_ratio") is not None and s["pe_ratio"] > 0],
+        key=lambda s: s["pe_ratio"],
+    )[:5]
+
+    # Sentiment: % of stocks with positive change today
+    changes = [s["change_pct"] for s in valid if s.get("change_pct") is not None]
+    if changes:
+        positive = sum(1 for c in changes if c > 0)
+        sentiment_pct = round(positive / len(changes) * 100)
+        sentiment = "Bullish" if sentiment_pct >= 55 else ("Bearish" if sentiment_pct <= 45 else "Neutral")
+    else:
+        sentiment_pct = 50
+        sentiment = "Neutral"
+
+    # Market overview: OSEBX proxy via OBX ETF if available
+    summary = {
+        "top_yield":     by_yield,
+        "top_value_pe":  by_pe,
+        "sentiment":     sentiment,
+        "sentiment_pct": sentiment_pct,
+        "total_stocks":  len(valid),
+        "advancing":     sum(1 for c in changes if c > 0),
+        "declining":     sum(1 for c in changes if c < 0),
+        "unchanged":     sum(1 for c in changes if c == 0),
+    }
+
+    cache.set(cache_key, summary, ttl=cache.TTL_SCREENER)
+    return summary
+
+
+# ────────────────────────────────────────────────────────────
+# Single stock detail (combines quote + info)
+# ────────────────────────────────────────────────────────────
+
+def get_stock_detail(ticker: str) -> dict:
+    """Full detail view for an individual stock page."""
+    cache_key = f"detail:{ticker}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    meta  = TICKER_MAP.get(ticker, {"name": ticker, "sector": "Unknown"})
+    quote = get_quote(ticker)
+
+    try:
+        tk   = yf.Ticker(ticker)
+        info = tk.info or {}
+
+        detail = {
+            **quote,
+            "description":     info.get("longBusinessSummary", ""),
+            "website":         info.get("website", ""),
+            "employees":       info.get("fullTimeEmployees"),
+            "industry":        info.get("industry", meta.get("sector")),
+            "country":         info.get("country", "Norway"),
+            "beta":            _safe(info.get("beta")),
+            "payout_ratio":    _pct(info.get("payoutRatio")),
+            "current_ratio":   _safe(info.get("currentRatio")),
+            "debt_to_equity":  _safe(info.get("debtToEquity")),
+            "roe":             _pct(info.get("returnOnEquity")),
+            "roa":             _pct(info.get("returnOnAssets")),
+            "profit_margin":   _pct(info.get("profitMargins")),
+            "gross_margin":    _pct(info.get("grossMargins")),
+            "revenue_growth":  _pct(info.get("revenueGrowth")),
+            "earnings_growth": _pct(info.get("earningsGrowth")),
+            "analyst_target":  _safe(info.get("targetMeanPrice")),
+            "recommendation":  info.get("recommendationKey", "").replace("-", " ").title(),
+        }
+
+    except Exception as exc:
+        logger.warning("Detail fetch failed for %s: %s", ticker, exc)
+        detail = {**quote, "error": str(exc)}
+
+    cache.set(cache_key, detail, ttl=cache.TTL_QUOTE)
+    return detail

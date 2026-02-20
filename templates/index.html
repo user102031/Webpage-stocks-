@@ -1,0 +1,332 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — OsloBørsen{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
+
+  <!-- ── Hero Header ─────────────────────────────────────── -->
+  <div class="mb-10">
+    <div class="flex items-center gap-3 mb-2">
+      <div class="w-1 h-8 bg-brand-500 rounded-full"></div>
+      <h1 class="text-3xl font-bold text-white tracking-tight">Market Overview</h1>
+    </div>
+    <p class="text-gray-400 ml-4 text-sm">Oslo Børs — Real-time Norwegian equity data</p>
+  </div>
+
+  <!-- ── Sentiment + Stats Row ──────────────────────────── -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
+
+    <!-- Sentiment card -->
+    <div class="card col-span-1 sm:col-span-2 lg:col-span-1 p-5 flex flex-col gap-4">
+      <div class="flex items-center justify-between">
+        <span class="text-xs uppercase tracking-widest text-gray-500 font-semibold">Market Sentiment</span>
+        <div id="sentiment-dot" class="w-2 h-2 rounded-full bg-gray-500 animate-pulse-slow"></div>
+      </div>
+      <div class="flex flex-col gap-1">
+        <div id="sentiment-label" class="text-2xl font-bold text-white skeleton-text">—</div>
+        <div id="sentiment-sub"   class="text-sm text-gray-400 skeleton-text">Loading…</div>
+      </div>
+      <!-- Advance/decline bar -->
+      <div class="space-y-1.5">
+        <div class="flex justify-between text-xs text-gray-500">
+          <span id="adv-count">— Advancing</span>
+          <span id="dec-count">— Declining</span>
+        </div>
+        <div class="h-2 rounded-full bg-surface-500 overflow-hidden flex">
+          <div id="adv-bar" class="h-full bg-up transition-all duration-700" style="width:50%"></div>
+          <div id="dec-bar" class="h-full bg-down transition-all duration-700" style="width:50%"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Total stocks, avg yield, avg P/E -->
+    <div class="card p-5 flex flex-col justify-between">
+      <span class="text-xs uppercase tracking-widest text-gray-500 font-semibold">Stocks Tracked</span>
+      <div id="stat-total" class="text-3xl font-bold text-white skeleton-text mt-2">—</div>
+      <span class="text-xs text-gray-500">Oslo Børs universe</span>
+    </div>
+
+    <div class="card p-5 flex flex-col justify-between">
+      <span class="text-xs uppercase tracking-widest text-gray-500 font-semibold">Top Yield Today</span>
+      <div id="stat-top-yield" class="text-3xl font-bold text-up skeleton-text mt-2">—</div>
+      <span id="stat-top-yield-name" class="text-xs text-gray-500 truncate">—</span>
+    </div>
+
+    <div class="card p-5 flex flex-col justify-between">
+      <span class="text-xs uppercase tracking-widest text-gray-500 font-semibold">Best Value (P/E)</span>
+      <div id="stat-top-pe" class="text-3xl font-bold text-brand-400 skeleton-text mt-2">—</div>
+      <span id="stat-top-pe-name" class="text-xs text-gray-500 truncate">—</span>
+    </div>
+
+  </div>
+
+  <!-- ── Top 5 Tables ────────────────────────────────────── -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
+
+    <!-- Top 5 Dividend Yield -->
+    <div class="card p-6">
+      <div class="flex items-center gap-3 mb-5">
+        <div class="w-8 h-8 rounded-lg bg-up/10 flex items-center justify-center">
+          <svg class="w-4 h-4 text-up" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+        <div>
+          <h2 class="text-white font-semibold text-sm">Top 5 Dividend Yield</h2>
+          <p class="text-gray-500 text-xs">Highest current yield</p>
+        </div>
+      </div>
+      <div id="top-yield-list" class="space-y-1">
+        <!-- Skeleton -->
+        <div class="skeleton h-10 rounded-lg"></div>
+        <div class="skeleton h-10 rounded-lg"></div>
+        <div class="skeleton h-10 rounded-lg"></div>
+        <div class="skeleton h-10 rounded-lg"></div>
+        <div class="skeleton h-10 rounded-lg"></div>
+      </div>
+    </div>
+
+    <!-- Top 5 Value by P/E -->
+    <div class="card p-6">
+      <div class="flex items-center gap-3 mb-5">
+        <div class="w-8 h-8 rounded-lg bg-brand-600/20 flex items-center justify-center">
+          <svg class="w-4 h-4 text-brand-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+          </svg>
+        </div>
+        <div>
+          <h2 class="text-white font-semibold text-sm">Top 5 Value (P/E)</h2>
+          <p class="text-gray-500 text-xs">Lowest P/E ratio — potentially undervalued
+            <button class="tooltip-btn ml-1" data-tip="pe_ratio">?</button>
+          </p>
+        </div>
+      </div>
+      <div id="top-pe-list" class="space-y-1">
+        <div class="skeleton h-10 rounded-lg"></div>
+        <div class="skeleton h-10 rounded-lg"></div>
+        <div class="skeleton h-10 rounded-lg"></div>
+        <div class="skeleton h-10 rounded-lg"></div>
+        <div class="skeleton h-10 rounded-lg"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── OSEBX Market Chart placeholder ─────────────────── -->
+  <div class="card p-6 mb-10">
+    <div class="flex items-center justify-between mb-5">
+      <div class="flex items-center gap-3">
+        <div>
+          <h2 class="text-white font-semibold">Oslo Børs — EQNR.OL (Proxy)</h2>
+          <p class="text-gray-500 text-xs">Equinor — Norway's largest listed company</p>
+        </div>
+      </div>
+      <div class="flex gap-1" id="market-chart-periods">
+        <button class="period-btn period-btn-active" data-period="1M">1M</button>
+        <button class="period-btn" data-period="3M">3M</button>
+        <button class="period-btn" data-period="1Y">1Y</button>
+      </div>
+    </div>
+    <div id="market-chart" class="h-64"></div>
+  </div>
+
+  <!-- ── Sector Overview ─────────────────────────────────── -->
+  <div class="card p-6">
+    <h2 class="text-white font-semibold mb-5">Sector Breakdown</h2>
+    <div id="sector-grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+      <!-- Populated by JS -->
+      <div class="skeleton h-20 rounded-xl"></div>
+      <div class="skeleton h-20 rounded-xl"></div>
+      <div class="skeleton h-20 rounded-xl"></div>
+      <div class="skeleton h-20 rounded-xl"></div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── Dashboard page logic ──────────────────────────────────
+(async function() {
+  // Fetch market summary
+  let summary;
+  try {
+    const res = await fetch('/api/summary');
+    summary = await res.json();
+  } catch(e) {
+    console.error('Summary fetch error', e);
+    return;
+  }
+
+  // Sentiment
+  const sentimentColors = { Bullish: '#22c55e', Neutral: '#f59e0b', Bearish: '#ef4444' };
+  const sc = sentimentColors[summary.sentiment] || '#6b7280';
+  document.getElementById('sentiment-dot').style.background = sc;
+  document.getElementById('sentiment-label').textContent = summary.sentiment;
+  document.getElementById('sentiment-label').style.color  = sc;
+  document.getElementById('sentiment-sub').textContent =
+    `${summary.sentiment_pct}% stocks advancing today`;
+
+  const total = (summary.advancing||0) + (summary.declining||0) + (summary.unchanged||0) || 1;
+  document.getElementById('adv-count').textContent = `${summary.advancing||0} Advancing`;
+  document.getElementById('dec-count').textContent = `${summary.declining||0} Declining`;
+  document.getElementById('adv-bar').style.width = `${(summary.advancing||0)/total*100}%`;
+  document.getElementById('dec-bar').style.width = `${(summary.declining||0)/total*100}%`;
+
+  // Stats
+  document.getElementById('stat-total').textContent = summary.total_stocks || '—';
+
+  const topYield = summary.top_yield?.[0];
+  if (topYield) {
+    document.getElementById('stat-top-yield').textContent =
+      topYield.dividend_yield != null ? `${topYield.dividend_yield.toFixed(1)}%` : '—';
+    document.getElementById('stat-top-yield-name').textContent = topYield.name || topYield.ticker;
+  }
+
+  const topPe = summary.top_value_pe?.[0];
+  if (topPe) {
+    document.getElementById('stat-top-pe').textContent =
+      topPe.pe_ratio != null ? `${topPe.pe_ratio.toFixed(1)}x` : '—';
+    document.getElementById('stat-top-pe-name').textContent = topPe.name || topPe.ticker;
+  }
+
+  // Top 5 Yield list
+  renderMiniList('top-yield-list', summary.top_yield || [], 'dividend_yield', '%', 'up');
+
+  // Top 5 P/E list
+  renderMiniList('top-pe-list', summary.top_value_pe || [], 'pe_ratio', 'x', 'brand-400');
+
+  // Market chart (EQNR proxy)
+  loadMarketChart('1M');
+  document.getElementById('market-chart-periods').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-period]');
+    if (!btn) return;
+    document.querySelectorAll('#market-chart-periods .period-btn').forEach(b => b.classList.remove('period-btn-active'));
+    btn.classList.add('period-btn-active');
+    loadMarketChart(btn.dataset.period);
+  });
+
+  // Sector grid
+  buildSectorGrid(summary.top_yield || [], summary.top_value_pe || []);
+})();
+
+function renderMiniList(containerId, items, valueKey, suffix, colorClass) {
+  const el = document.getElementById(containerId);
+  if (!items.length) {
+    el.innerHTML = '<p class="text-gray-500 text-sm py-4 text-center">No data available</p>';
+    return;
+  }
+  el.innerHTML = items.map((s, i) => `
+    <a href="/stock/${s.ticker}" class="flex items-center gap-3 p-2.5 rounded-lg hover:bg-surface-500 transition-colors group">
+      <div class="w-6 h-6 rounded-full bg-surface-500 flex items-center justify-center text-xs text-gray-400 font-mono group-hover:bg-surface-400">${i+1}</div>
+      <div class="flex-1 min-w-0">
+        <div class="text-sm font-medium text-white truncate">${s.name || s.ticker}</div>
+        <div class="text-xs text-gray-500 font-mono">${s.ticker}</div>
+      </div>
+      <div class="text-${colorClass} font-semibold text-sm font-mono tabular-nums">
+        ${s[valueKey] != null ? s[valueKey].toFixed(2)+suffix : '—'}
+      </div>
+    </a>
+  `).join('');
+}
+
+let marketChartInstance = null;
+async function loadMarketChart(period) {
+  try {
+    const res = await fetch(`/api/history/EQNR.OL?period=${period}`);
+    const data = await res.json();
+
+    const prices = (data.data || []).map(d => ({ x: new Date(d.x).getTime(), y: d.c }));
+    if (!prices.length) return;
+
+    const firstPrice = prices[0].y;
+    const lastPrice  = prices[prices.length-1].y;
+    const isUp       = lastPrice >= firstPrice;
+
+    const options = {
+      chart: {
+        type: 'area',
+        height: 256,
+        background: 'transparent',
+        toolbar: { show: false },
+        animations: { enabled: true, speed: 500 },
+        sparkline: { enabled: false },
+      },
+      series: [{ name: 'EQNR.OL', data: prices }],
+      xaxis: {
+        type: 'datetime',
+        labels: { style: { colors: '#6b7280', fontSize: '11px' }, datetimeFormatter: { month: 'MMM', day: 'dd MMM' } },
+        axisBorder: { show: false },
+        axisTicks: { show: false },
+      },
+      yaxis: {
+        labels: { style: { colors: '#6b7280', fontSize: '11px' }, formatter: v => 'NOK '+v.toFixed(0) },
+        opposite: true,
+      },
+      stroke: { curve: 'smooth', width: 2, colors: [isUp ? '#22c55e' : '#ef4444'] },
+      fill: {
+        type: 'gradient',
+        gradient: {
+          shadeIntensity: 1, opacityFrom: 0.3, opacityTo: 0,
+          stops: [0, 100],
+          colorStops: [[{ offset:0, color: isUp ? '#22c55e' : '#ef4444', opacity: 0.3 }, { offset:100, color: isUp ? '#22c55e' : '#ef4444', opacity: 0 }]],
+        },
+      },
+      grid: { borderColor: '#1c1c35', strokeDashArray: 4 },
+      tooltip: {
+        theme: 'dark',
+        x: { format: 'dd MMM yyyy' },
+        y: { formatter: v => 'NOK '+v.toFixed(2) },
+      },
+      theme: { mode: 'dark' },
+    };
+
+    const container = document.getElementById('market-chart');
+    if (marketChartInstance) { marketChartInstance.destroy(); }
+    marketChartInstance = new ApexCharts(container, options);
+    marketChartInstance.render();
+
+  } catch(e) {
+    console.error('Market chart error', e);
+  }
+}
+
+async function buildSectorGrid(yieldStocks, peStocks) {
+  // Fetch screener for sector counts
+  try {
+    const res = await fetch('/api/screener');
+    const stocks = await res.json();
+    const sectors = {};
+    for (const s of stocks) {
+      const sec = s.sector || 'Unknown';
+      if (!sectors[sec]) sectors[sec] = { count: 0, gainers: 0, losers: 0 };
+      sectors[sec].count++;
+      if ((s.change_pct || 0) > 0) sectors[sec].gainers++;
+      if ((s.change_pct || 0) < 0) sectors[sec].losers++;
+    }
+    const colors = ['bg-blue-600/20 border-blue-600/30','bg-green-600/20 border-green-600/30','bg-yellow-600/20 border-yellow-600/30','bg-purple-600/20 border-purple-600/30','bg-rose-600/20 border-rose-600/30','bg-cyan-600/20 border-cyan-600/30','bg-orange-600/20 border-orange-600/30','bg-teal-600/20 border-teal-600/30'];
+    let i = 0;
+    const html = Object.entries(sectors).map(([sec, data]) => {
+      const clr = colors[i++ % colors.length];
+      const g = data.gainers, l = data.losers;
+      return `
+        <a href="/screener?sector=${encodeURIComponent(sec)}"
+           class="border ${clr} rounded-xl p-4 hover:brightness-125 transition-all cursor-pointer">
+          <div class="text-white font-medium text-sm truncate">${sec}</div>
+          <div class="text-gray-400 text-xs mt-1">${data.count} stocks</div>
+          <div class="flex gap-2 mt-2 text-xs">
+            <span class="text-up">${g}▲</span>
+            <span class="text-down">${l}▼</span>
+          </div>
+        </a>`;
+    }).join('');
+    document.getElementById('sector-grid').innerHTML = html;
+  } catch(e) {
+    console.error('Sector grid error', e);
+  }
+}
+</script>
+{% endblock %}

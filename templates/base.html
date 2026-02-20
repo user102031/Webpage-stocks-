@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}OsloBørsen — Norwegian Stock Analyzer{% endblock %}</title>
+
+  <!-- Tailwind CSS (CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50:  '#eef2ff',
+              100: '#e0e7ff',
+              400: '#818cf8',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+              900: '#1e1b4b',
+            },
+            surface: {
+              900: '#0a0a0f',
+              800: '#0f0f1a',
+              700: '#15152a',
+              600: '#1c1c35',
+              500: '#24243f',
+              400: '#2e2e52',
+            },
+            up:   '#22c55e',
+            down: '#ef4444',
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
+          },
+          animation: {
+            'fade-in':    'fadeIn 0.4s ease-in-out',
+            'slide-up':   'slideUp 0.4s ease-out',
+            'pulse-slow': 'pulse 3s cubic-bezier(0.4,0,0.6,1) infinite',
+          },
+          keyframes: {
+            fadeIn:  { '0%': { opacity: '0' }, '100%': { opacity: '1' } },
+            slideUp: { '0%': { opacity: '0', transform: 'translateY(16px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } },
+          },
+        },
+      },
+    };
+  </script>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+
+  <!-- ApexCharts -->
+  <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.0/dist/apexcharts.min.js"></script>
+
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/custom.css') }}" />
+
+  {% block head_extra %}{% endblock %}
+</head>
+
+<body class="bg-surface-900 text-gray-100 font-sans antialiased min-h-screen flex flex-col">
+
+  <!-- ── Navigation ─────────────────────────────────────── -->
+  <nav class="sticky top-0 z-50 border-b border-surface-600 bg-surface-800/95 backdrop-blur-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+
+        <!-- Logo -->
+        <a href="/" class="flex items-center gap-2 group">
+          <div class="w-8 h-8 rounded-lg bg-brand-600 flex items-center justify-center shadow-lg shadow-brand-600/30 group-hover:shadow-brand-600/50 transition-shadow">
+            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" />
+            </svg>
+          </div>
+          <div class="leading-tight">
+            <div class="text-white font-bold text-sm tracking-tight">OsloBørsen</div>
+            <div class="text-gray-500 text-xs">Stock Analyzer</div>
+          </div>
+        </a>
+
+        <!-- Desktop nav links -->
+        <div class="hidden md:flex items-center gap-1">
+          <a href="/"          class="nav-link {% if page=='dashboard' %}nav-link-active{% endif %}">Dashboard</a>
+          <a href="/screener"  class="nav-link {% if page=='screener'  %}nav-link-active{% endif %}">Screener</a>
+          <a href="/calendar"  class="nav-link {% if page=='calendar'  %}nav-link-active{% endif %}">Dividends</a>
+        </div>
+
+        <!-- Right area: market status + mobile menu btn -->
+        <div class="flex items-center gap-3">
+          <div class="hidden sm:flex items-center gap-2 text-xs">
+            <div id="market-status-dot" class="w-2 h-2 rounded-full bg-up animate-pulse-slow"></div>
+            <span id="market-status-label" class="text-gray-400">Oslo Børs</span>
+          </div>
+
+          <!-- Watchlist button -->
+          <button onclick="window.watchlistPanel?.toggle()"
+                  class="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-600 hover:bg-surface-500 text-sm text-gray-300 transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+            </svg>
+            <span>Watchlist</span>
+            <span id="watchlist-count" class="bg-brand-600 text-white text-xs rounded-full px-1.5 py-0.5 leading-none hidden">0</span>
+          </button>
+
+          <!-- Mobile hamburger -->
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-surface-600 transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Mobile nav -->
+    <div id="mobile-menu" class="hidden md:hidden border-t border-surface-600 bg-surface-800">
+      <div class="px-4 py-3 flex flex-col gap-1">
+        <a href="/"         class="mobile-nav-link {% if page=='dashboard' %}mobile-nav-active{% endif %}">Dashboard</a>
+        <a href="/screener" class="mobile-nav-link {% if page=='screener'  %}mobile-nav-active{% endif %}">Screener</a>
+        <a href="/calendar" class="mobile-nav-link {% if page=='calendar'  %}mobile-nav-active{% endif %}">Dividends</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ── Watchlist Side Panel ────────────────────────────── -->
+  <div id="watchlist-overlay" class="fixed inset-0 bg-black/50 z-40 hidden" onclick="watchlistPanel.close()"></div>
+  <aside id="watchlist-panel"
+         class="fixed top-0 right-0 h-full w-80 bg-surface-800 border-l border-surface-600
+                transform translate-x-full transition-transform duration-300 z-50 flex flex-col">
+    <div class="flex items-center justify-between p-4 border-b border-surface-600">
+      <h2 class="font-semibold text-white">Watchlist</h2>
+      <button onclick="watchlistPanel.close()" class="p-1 rounded hover:bg-surface-600 transition-colors">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+    <div id="watchlist-items" class="flex-1 overflow-y-auto p-4 space-y-2">
+      <p class="text-gray-500 text-sm text-center py-8">Add stocks by clicking the bookmark icon on any stock.</p>
+    </div>
+  </aside>
+
+  <!-- ── Main Content ────────────────────────────────────── -->
+  <main class="flex-1">
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- ── Footer ─────────────────────────────────────────── -->
+  <footer class="border-t border-surface-600 bg-surface-800 mt-16">
+    <div class="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <div class="w-6 h-6 rounded bg-brand-600 flex items-center justify-center">
+            <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M7 12l3-3 3 3 4-4" />
+            </svg>
+          </div>
+          <span class="text-sm font-medium text-white">OsloBørsen</span>
+        </div>
+        <p class="text-xs text-gray-500 text-center">
+          Data sourced from yfinance. For informational purposes only — not financial advice.
+          Prices may be delayed up to 15 minutes.
+        </p>
+        <div class="flex items-center gap-4 text-xs text-gray-500">
+          <span>Oslo Børs / Euronext</span>
+          <span>·</span>
+          <span>NOK</span>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ── Tooltip Popup ───────────────────────────────────── -->
+  <div id="tooltip-popup"
+       class="fixed z-50 max-w-xs bg-surface-500 border border-surface-400 rounded-xl shadow-2xl p-4
+              opacity-0 pointer-events-none transition-opacity duration-200 text-sm">
+    <div id="tooltip-title" class="font-semibold text-white mb-1"></div>
+    <div id="tooltip-body"  class="text-gray-300 leading-relaxed"></div>
+  </div>
+
+  <!-- ── Global JS ──────────────────────────────────────── -->
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

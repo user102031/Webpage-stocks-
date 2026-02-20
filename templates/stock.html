@@ -1,0 +1,476 @@
+{% extends "base.html" %}
+{% block title %}{{ stock_name }} ({{ ticker }}) — OsloBørsen{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in" id="stock-page" data-ticker="{{ ticker }}">
+
+  <!-- Breadcrumb -->
+  <nav class="flex items-center gap-2 text-sm text-gray-500 mb-6">
+    <a href="/screener" class="hover:text-white transition-colors">Screener</a>
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+    </svg>
+    <span class="text-white">{{ ticker }}</span>
+  </nav>
+
+  <!-- ── Stock Header ─────────────────────────────────────── -->
+  <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-8">
+    <div class="flex items-center gap-4">
+      <!-- Company initials avatar -->
+      <div class="w-14 h-14 rounded-2xl bg-brand-600/20 border border-brand-600/30 flex items-center justify-center text-brand-400 font-bold text-xl">
+        {{ ticker[:2] }}
+      </div>
+      <div>
+        <h1 class="text-2xl font-bold text-white">{{ stock_name }}</h1>
+        <div class="flex items-center gap-2 mt-1">
+          <span class="text-sm font-mono text-gray-400">{{ ticker }}</span>
+          <span class="w-1 h-1 rounded-full bg-gray-600"></span>
+          <span class="text-sm text-gray-400">{{ sector }}</span>
+          <span class="w-1 h-1 rounded-full bg-gray-600"></span>
+          <span class="text-xs text-gray-500">Oslo Børs</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Price + change -->
+    <div class="flex flex-col items-start sm:items-end gap-1">
+      <div class="flex items-baseline gap-2">
+        <span id="hdr-price" class="text-3xl font-bold font-mono text-white tabular-nums skeleton-text">—</span>
+        <span id="hdr-currency" class="text-gray-400 text-sm">NOK</span>
+      </div>
+      <div id="hdr-change" class="text-sm font-mono tabular-nums skeleton-text">—</div>
+      <div class="flex items-center gap-2 mt-1">
+        <button id="watch-stock-btn" onclick="toggleWatchStock()"
+                class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-surface-500 hover:border-brand-500 transition-colors text-xs text-gray-400 hover:text-brand-400">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+          </svg>
+          <span id="watch-label">Watchlist</span>
+        </button>
+        <span id="recommendation-badge" class="hidden text-xs px-2 py-1 rounded-full border"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Key Metrics Cards ───────────────────────────────── -->
+  <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-8">
+    <div class="metric-card">
+      <div class="metric-label">Div. Yield <button class="tooltip-btn" data-tip="dividend_yield">?</button></div>
+      <div id="m-yield" class="metric-value text-up skeleton-text">—</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">P/E Ratio <button class="tooltip-btn" data-tip="pe_ratio">?</button></div>
+      <div id="m-pe" class="metric-value skeleton-text">—</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">P/B Ratio <button class="tooltip-btn" data-tip="pb_ratio">?</button></div>
+      <div id="m-pb" class="metric-value skeleton-text">—</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">EPS <button class="tooltip-btn" data-tip="eps">?</button></div>
+      <div id="m-eps" class="metric-value skeleton-text">—</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Market Cap</div>
+      <div id="m-cap" class="metric-value skeleton-text">—</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Score <button class="tooltip-btn" data-tip="score">?</button></div>
+      <div id="m-score" class="skeleton-text">—</div>
+    </div>
+  </div>
+
+  <!-- ── Price Chart ─────────────────────────────────────── -->
+  <div class="card p-6 mb-6">
+    <div class="flex items-center justify-between mb-5">
+      <h2 class="text-white font-semibold">Price History</h2>
+      <div class="flex gap-1" id="price-chart-periods">
+        <button class="period-btn" data-period="1W">1W</button>
+        <button class="period-btn" data-period="1M">1M</button>
+        <button class="period-btn" data-period="3M">3M</button>
+        <button class="period-btn period-btn-active" data-period="1Y">1Y</button>
+        <button class="period-btn" data-period="5Y">5Y</button>
+      </div>
+    </div>
+    <div id="price-chart" class="h-72"></div>
+  </div>
+
+  <!-- ── Charts Row: Dividends + Financials ──────────────── -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+
+    <!-- Dividend History -->
+    <div class="card p-6">
+      <div class="flex items-center gap-3 mb-5">
+        <div class="w-8 h-8 rounded-lg bg-up/10 flex items-center justify-center">
+          <svg class="w-4 h-4 text-up" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+        <div>
+          <h2 class="text-white font-semibold text-sm">Annual Dividends Paid</h2>
+          <p class="text-gray-500 text-xs">Total per year (NOK per share)</p>
+        </div>
+      </div>
+      <div id="dividend-chart" class="h-52"></div>
+    </div>
+
+    <!-- Revenue & Net Income -->
+    <div class="card p-6">
+      <div class="flex items-center gap-3 mb-5">
+        <div class="w-8 h-8 rounded-lg bg-brand-600/20 flex items-center justify-center">
+          <svg class="w-4 h-4 text-brand-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+          </svg>
+        </div>
+        <div>
+          <h2 class="text-white font-semibold text-sm">Revenue &amp; Net Income</h2>
+          <div class="flex items-center gap-3 mt-1">
+            <button id="fin-annual-btn"  class="fin-period-btn fin-period-active text-xs">Annual</button>
+            <button id="fin-quarter-btn" class="fin-period-btn text-xs">Quarterly</button>
+          </div>
+        </div>
+      </div>
+      <div id="financials-chart" class="h-52"></div>
+    </div>
+
+  </div>
+
+  <!-- ── Additional Metrics + Description ────────────────── -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+
+    <!-- Valuation / Efficiency metrics -->
+    <div class="card p-6">
+      <h3 class="text-white font-semibold text-sm mb-4">Valuation &amp; Profitability</h3>
+      <div class="space-y-3" id="extra-metrics">
+        <!-- Populated by JS -->
+        <div class="skeleton h-5 rounded"></div>
+        <div class="skeleton h-5 rounded"></div>
+        <div class="skeleton h-5 rounded"></div>
+        <div class="skeleton h-5 rounded"></div>
+        <div class="skeleton h-5 rounded"></div>
+      </div>
+    </div>
+
+    <!-- 52W Range + volume -->
+    <div class="card p-6">
+      <h3 class="text-white font-semibold text-sm mb-4">Price Statistics</h3>
+      <div class="space-y-4" id="price-stats">
+        <div class="skeleton h-5 rounded"></div>
+        <div class="skeleton h-5 rounded"></div>
+        <div class="skeleton h-5 rounded"></div>
+      </div>
+    </div>
+
+    <!-- Company description -->
+    <div class="card p-6">
+      <h3 class="text-white font-semibold text-sm mb-4">About</h3>
+      <p id="company-desc" class="text-gray-400 text-sm leading-relaxed line-clamp-8 skeleton-text">
+        Loading company information…
+      </p>
+      <a id="company-website" href="#" target="_blank" rel="noopener"
+         class="hidden mt-3 inline-flex items-center gap-1 text-brand-400 text-xs hover:underline">
+        Visit website
+        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+        </svg>
+      </a>
+    </div>
+
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const TICKER = document.getElementById('stock-page').dataset.ticker;
+let priceChartInstance   = null;
+let divChartInstance     = null;
+let finChartInstance     = null;
+let finDataAnnual        = [];
+let finDataQuarterly     = [];
+
+// ── Load detail ───────────────────────────────────────────
+(async () => {
+  const [detailRes, divRes, finRes] = await Promise.allSettled([
+    fetch(`/api/detail/${TICKER}`).then(r => r.json()),
+    fetch(`/api/dividends/${TICKER}`).then(r => r.json()),
+    fetch(`/api/financials/${TICKER}`).then(r => r.json()),
+  ]);
+
+  const detail = detailRes.status === 'fulfilled' ? detailRes.value : {};
+  const divs   = divRes.status   === 'fulfilled' ? divRes.value   : {};
+  const fins   = finRes.status   === 'fulfilled' ? finRes.value   : {};
+
+  populateHeader(detail);
+  populateMetricCards(detail);
+  populateExtraMetrics(detail);
+  populatePriceStats(detail);
+  populateDescription(detail);
+  renderDividendChart(divs);
+
+  finDataAnnual    = (fins.annual    || []).reverse();
+  finDataQuarterly = (fins.quarterly || []).reverse();
+  renderFinancialsChart(finDataAnnual);
+})();
+
+// ── Price chart (initial 1Y) ──────────────────────────────
+loadPriceChart('1Y');
+document.getElementById('price-chart-periods').addEventListener('click', e => {
+  const btn = e.target.closest('[data-period]');
+  if (!btn) return;
+  document.querySelectorAll('#price-chart-periods .period-btn').forEach(b => b.classList.remove('period-btn-active'));
+  btn.classList.add('period-btn-active');
+  loadPriceChart(btn.dataset.period);
+});
+
+// Financials toggle
+document.getElementById('fin-annual-btn').addEventListener('click', () => {
+  document.getElementById('fin-annual-btn').classList.add('fin-period-active');
+  document.getElementById('fin-quarter-btn').classList.remove('fin-period-active');
+  renderFinancialsChart(finDataAnnual);
+});
+document.getElementById('fin-quarter-btn').addEventListener('click', () => {
+  document.getElementById('fin-quarter-btn').classList.add('fin-period-active');
+  document.getElementById('fin-annual-btn').classList.remove('fin-period-active');
+  renderFinancialsChart(finDataQuarterly);
+});
+
+// ── Populate functions ────────────────────────────────────
+function populateHeader(d) {
+  const priceEl = document.getElementById('hdr-price');
+  const changeEl = document.getElementById('hdr-change');
+  priceEl.textContent = d.price != null ? d.price.toFixed(2) : '—';
+  document.getElementById('hdr-currency').textContent = d.currency || 'NOK';
+
+  if (d.change_pct != null) {
+    const sign = d.change_pct > 0 ? '+' : '';
+    const cls  = d.change_pct > 0 ? 'text-up' : d.change_pct < 0 ? 'text-down' : 'text-gray-400';
+    changeEl.textContent = `${sign}${d.change_pct.toFixed(2)}% today`;
+    changeEl.className = `text-sm font-mono tabular-nums ${cls}`;
+  }
+
+  // Analyst recommendation
+  if (d.recommendation) {
+    const badge = document.getElementById('recommendation-badge');
+    const badgeCls = d.recommendation.toLowerCase().includes('buy')
+      ? 'border-up/30 bg-up/10 text-up'
+      : d.recommendation.toLowerCase().includes('sell')
+        ? 'border-down/30 bg-down/10 text-down'
+        : 'border-yellow-500/30 bg-yellow-500/10 text-yellow-400';
+    badge.className = `text-xs px-2 py-1 rounded-full border ${badgeCls}`;
+    badge.textContent = d.recommendation;
+    badge.classList.remove('hidden');
+  }
+
+  updateWatchButton();
+}
+
+function populateMetricCards(d) {
+  const fmt = (v, suffix='', decimals=2) => v != null ? v.toFixed(decimals)+suffix : '—';
+  document.getElementById('m-yield').textContent = fmt(d.dividend_yield, '%');
+  document.getElementById('m-pe').textContent    = fmt(d.pe_ratio,  'x', 1);
+  document.getElementById('m-pb').textContent    = fmt(d.pb_ratio,  'x');
+  document.getElementById('m-eps').textContent   = fmt(d.eps);
+  document.getElementById('m-cap').textContent   = d.market_cap_fmt || '—';
+
+  const scoreEl = document.getElementById('m-score');
+  if (d.score != null) {
+    const cls = d.score >= 60 ? 'text-up' : d.score >= 35 ? 'text-yellow-400' : 'text-down';
+    scoreEl.innerHTML = `<span class="text-2xl font-bold ${cls}">${d.score}</span><span class="text-gray-500 text-sm">/100</span>`;
+  } else {
+    scoreEl.textContent = '—';
+  }
+}
+
+function metricRow(label, value, tip='') {
+  const tipBtn = tip ? `<button class="tooltip-btn ml-1" data-tip="${tip}">?</button>` : '';
+  const valHtml = value !== null && value !== undefined && value !== '—'
+    ? `<span class="font-mono text-white tabular-nums">${value}</span>`
+    : `<span class="text-gray-600">—</span>`;
+  return `<div class="flex items-center justify-between py-1 border-b border-surface-600 last:border-0">
+    <span class="text-gray-400 text-sm">${label}${tipBtn}</span>
+    ${valHtml}
+  </div>`;
+}
+
+function populateExtraMetrics(d) {
+  const fmt = (v, suf='', dec=2) => v != null ? v.toFixed(dec)+suf : null;
+  const el = document.getElementById('extra-metrics');
+  el.innerHTML = [
+    metricRow('ROE',          fmt(d.roe,          '%'), 'roe'),
+    metricRow('ROA',          fmt(d.roa,          '%')),
+    metricRow('Profit Margin',fmt(d.profit_margin,'%')),
+    metricRow('Payout Ratio', fmt(d.payout_ratio, '%'), 'payout_ratio'),
+    metricRow('Debt/Equity',  fmt(d.debt_to_equity,'x')),
+    metricRow('Current Ratio',fmt(d.current_ratio, 'x')),
+    metricRow('Beta',         fmt(d.beta,           '',2), 'beta'),
+    metricRow('Employees',    d.employees ? d.employees.toLocaleString() : null),
+  ].join('');
+}
+
+function populatePriceStats(d) {
+  const el = document.getElementById('price-stats');
+  const curr = d.currency || 'NOK';
+  const fmt = v => v != null ? `${v.toFixed(2)} ${curr}` : null;
+  const lo  = d.week52_low,  hi = d.week52_high, price = d.price;
+  const pct = (hi > lo && price != null) ? ((price-lo)/(hi-lo)*100).toFixed(0) : 50;
+
+  el.innerHTML = `
+    ${metricRow('Current Price', fmt(price))}
+    ${metricRow('52W High',      fmt(hi))}
+    ${metricRow('52W Low',       fmt(lo))}
+    ${lo && hi ? `
+    <div class="py-2">
+      <div class="text-gray-400 text-xs mb-2">52-Week Position</div>
+      <div class="relative h-2 bg-surface-500 rounded-full">
+        <div class="absolute left-0 top-0 h-full rounded-full bg-gradient-to-r from-down to-up opacity-30" style="width:100%"></div>
+        <div class="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-brand-400 border-2 border-surface-800 shadow"
+             style="left:${pct}%"></div>
+      </div>
+      <div class="flex justify-between text-xs text-gray-600 mt-1 font-mono">
+        <span>${lo.toFixed(2)}</span><span>${hi.toFixed(2)}</span>
+      </div>
+    </div>` : ''}
+    ${metricRow('Avg Volume',    d.avg_volume ? d.avg_volume.toLocaleString() : null)}
+    ${metricRow('Volume',        d.volume     ? d.volume.toLocaleString()     : null)}
+    ${metricRow('Analyst Target',fmt(d.analyst_target))}
+  `;
+}
+
+function populateDescription(d) {
+  const descEl = document.getElementById('company-desc');
+  descEl.textContent = d.description || `No description available for ${TICKER}.`;
+
+  if (d.website) {
+    const webEl = document.getElementById('company-website');
+    webEl.href = d.website;
+    webEl.classList.remove('hidden');
+  }
+}
+
+// ── Price chart ───────────────────────────────────────────
+async function loadPriceChart(period) {
+  try {
+    const res  = await fetch(`/api/history/${TICKER}?period=${period}`);
+    const data = await res.json();
+    const rows = data.data || [];
+
+    const series = rows.map(d => ({ x: new Date(d.x).getTime(), y: d.c }));
+    if (!series.length) return;
+
+    const firstPrice = series[0].y;
+    const lastPrice  = series[series.length-1].y;
+    const isUp       = lastPrice >= firstPrice;
+
+    const opts = {
+      chart: { type: 'area', height: 288, background: 'transparent', toolbar: { show: false }, animations: { enabled: true, speed: 400 } },
+      series: [{ name: TICKER, data: series }],
+      xaxis: { type: 'datetime', labels: { style: { colors: '#6b7280', fontSize: '11px' } }, axisBorder: { show: false }, axisTicks: { show: false } },
+      yaxis: { labels: { style: { colors: '#6b7280', fontSize: '11px' }, formatter: v => v.toFixed(0) }, opposite: true },
+      stroke: { curve: 'smooth', width: 2, colors: [isUp ? '#22c55e' : '#ef4444'] },
+      fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.25, opacityTo: 0, stops: [0,100], colorStops: [[{ offset:0, color: isUp?'#22c55e':'#ef4444', opacity:0.25 },{ offset:100, color: isUp?'#22c55e':'#ef4444', opacity:0 }]] } },
+      grid: { borderColor: '#1c1c35', strokeDashArray: 4 },
+      tooltip: { theme: 'dark', x: { format: 'dd MMM yyyy' }, y: { formatter: v => v.toFixed(2)+' '+(data.currency||'NOK') } },
+      theme: { mode: 'dark' },
+    };
+
+    const container = document.getElementById('price-chart');
+    if (priceChartInstance) priceChartInstance.destroy();
+    priceChartInstance = new ApexCharts(container, opts);
+    priceChartInstance.render();
+  } catch(e) {
+    console.error('Price chart error', e);
+  }
+}
+
+// ── Dividend chart ────────────────────────────────────────
+function renderDividendChart(divData) {
+  const annual = divData.annual || [];
+  if (!annual.length) {
+    document.getElementById('dividend-chart').innerHTML =
+      '<p class="text-gray-500 text-sm text-center pt-16">No dividend history available.</p>';
+    return;
+  }
+  const years  = annual.map(d => d.year.toString());
+  const totals = annual.map(d => parseFloat(d.total.toFixed(4)));
+
+  const opts = {
+    chart: { type: 'bar', height: 208, background: 'transparent', toolbar: { show: false } },
+    series: [{ name: 'Dividends (NOK)', data: totals }],
+    xaxis: { categories: years, labels: { style: { colors: '#6b7280', fontSize: '11px' } }, axisBorder: { show: false }, axisTicks: { show: false } },
+    yaxis: { labels: { style: { colors: '#6b7280', fontSize: '11px' }, formatter: v => v.toFixed(2) } },
+    plotOptions: { bar: { borderRadius: 4, columnWidth: '55%' } },
+    colors: ['#22c55e'],
+    fill: { opacity: 0.85 },
+    grid: { borderColor: '#1c1c35', strokeDashArray: 4, yaxis: { lines: { show: true } }, xaxis: { lines: { show: false } } },
+    tooltip: { theme: 'dark', y: { formatter: v => v.toFixed(4)+' NOK/share' } },
+    dataLabels: { enabled: false },
+    theme: { mode: 'dark' },
+  };
+
+  const container = document.getElementById('dividend-chart');
+  if (divChartInstance) divChartInstance.destroy();
+  divChartInstance = new ApexCharts(container, opts);
+  divChartInstance.render();
+}
+
+// ── Financials chart ──────────────────────────────────────
+function renderFinancialsChart(data) {
+  if (!data.length) {
+    document.getElementById('financials-chart').innerHTML =
+      '<p class="text-gray-500 text-sm text-center pt-16">Financial data unavailable.</p>';
+    return;
+  }
+  const periods    = data.map(d => d.period);
+  const revenues   = data.map(d => d.revenue   != null ? +(d.revenue/1e9).toFixed(2) : null);
+  const netIncomes = data.map(d => d.net_income != null ? +(d.net_income/1e9).toFixed(2) : null);
+  const fcfs       = data.map(d => d.fcf        != null ? +(d.fcf/1e9).toFixed(2) : null);
+
+  const series = [
+    { name: 'Revenue',    data: revenues },
+    { name: 'Net Income', data: netIncomes },
+  ];
+  if (fcfs.some(v => v != null)) series.push({ name: 'Free Cash Flow', data: fcfs });
+
+  const opts = {
+    chart: { type: 'bar', height: 208, background: 'transparent', toolbar: { show: false } },
+    series,
+    xaxis: { categories: periods, labels: { style: { colors: '#6b7280', fontSize: '10px' } }, axisBorder: { show: false }, axisTicks: { show: false } },
+    yaxis: { labels: { style: { colors: '#6b7280', fontSize: '11px' }, formatter: v => v != null ? v.toFixed(1)+'B' : '—' } },
+    plotOptions: { bar: { borderRadius: 3, columnWidth: '65%', grouped: true } },
+    colors: ['#6366f1', '#22c55e', '#f59e0b'],
+    fill: { opacity: [0.9, 0.85, 0.8] },
+    grid: { borderColor: '#1c1c35', strokeDashArray: 4 },
+    tooltip: { theme: 'dark', y: { formatter: v => v != null ? v.toFixed(2)+'B NOK' : '—' } },
+    dataLabels: { enabled: false },
+    legend: { labels: { colors: '#9ca3af' } },
+    theme: { mode: 'dark' },
+  };
+
+  const container = document.getElementById('financials-chart');
+  if (finChartInstance) finChartInstance.destroy();
+  finChartInstance = new ApexCharts(container, opts);
+  finChartInstance.render();
+}
+
+// ── Watchlist ─────────────────────────────────────────────
+function updateWatchButton() {
+  const isWatched = watchlist.has(TICKER);
+  const btn  = document.getElementById('watch-stock-btn');
+  const lbl  = document.getElementById('watch-label');
+  const icon = btn.querySelector('svg');
+  lbl.textContent = isWatched ? 'Watching' : 'Watchlist';
+  icon.setAttribute('fill', isWatched ? 'currentColor' : 'none');
+  btn.classList.toggle('border-brand-500', isWatched);
+  btn.classList.toggle('text-brand-400',   isWatched);
+}
+function toggleWatchStock() {
+  watchlist.toggle(TICKER);
+  updateWatchButton();
+}
+</script>
+{% endblock %}

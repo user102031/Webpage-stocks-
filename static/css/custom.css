@@ -1,0 +1,270 @@
+/* ════════════════════════════════════════════════════════
+   OsloBørsen — Custom CSS
+   Supplements Tailwind with component patterns and
+   animations that are difficult to express inline.
+   ════════════════════════════════════════════════════════ */
+
+/* ── Scrollbar ──────────────────────────────────────────── */
+::-webkit-scrollbar          { width: 6px; height: 6px; }
+::-webkit-scrollbar-track    { background: #0f0f1a; }
+::-webkit-scrollbar-thumb    { background: #2e2e52; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #4338ca; }
+
+/* ── Selection ──────────────────────────────────────────── */
+::selection { background: rgba(99,102,241,.35); color: #e0e7ff; }
+
+/* ── Glass card ─────────────────────────────────────────── */
+.card {
+  background: rgba(15,15,26,.85);
+  border: 1px solid #1c1c35;
+  border-radius: 1rem;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: border-color .2s, box-shadow .2s;
+}
+.card:hover {
+  border-color: #2e2e52;
+}
+
+/* ── Nav links ──────────────────────────────────────────── */
+.nav-link {
+  display: inline-flex;
+  align-items: center;
+  padding: .375rem .75rem;
+  border-radius: .5rem;
+  font-size: .875rem;
+  color: #9ca3af;
+  transition: color .15s, background .15s;
+  text-decoration: none;
+}
+.nav-link:hover        { color: #fff; background: #1c1c35; }
+.nav-link-active       { color: #fff; background: #1c1c35; font-weight: 500; }
+
+.mobile-nav-link {
+  display: block;
+  padding: .625rem .75rem;
+  border-radius: .5rem;
+  font-size: .875rem;
+  color: #9ca3af;
+  text-decoration: none;
+  transition: color .15s, background .15s;
+}
+.mobile-nav-link:hover { color: #fff; background: #1c1c35; }
+.mobile-nav-active     { color: #fff; background: #1c1c35; font-weight: 500; }
+
+/* ── Input field ────────────────────────────────────────── */
+.input-field {
+  background: #0f0f1a;
+  border: 1px solid #1c1c35;
+  border-radius: .625rem;
+  color: #f3f4f6;
+  font-size: .875rem;
+  padding: .5rem .75rem;
+  outline: none;
+  transition: border-color .2s, box-shadow .2s;
+  -webkit-appearance: none;
+}
+.input-field::placeholder { color: #4b5563; }
+.input-field:focus {
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 3px rgba(79,70,229,.15);
+}
+
+/* ── Table header cell ──────────────────────────────────── */
+.th-cell {
+  padding: .75rem 1rem;
+  font-size: .6875rem;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: #6b7280;
+  white-space: nowrap;
+  user-select: none;
+}
+.th-cell.sortable:hover { color: #e5e7eb; cursor: pointer; }
+.th-cell.sort-asc::after  { content: ' ↑'; color: #6366f1; }
+.th-cell.sort-desc::after { content: ' ↓'; color: #6366f1; }
+
+/* ── Metric card ────────────────────────────────────────── */
+.metric-card {
+  background: rgba(15,15,26,.85);
+  border: 1px solid #1c1c35;
+  border-radius: .875rem;
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: .375rem;
+  transition: border-color .2s;
+}
+.metric-card:hover { border-color: #2e2e52; }
+.metric-label {
+  font-size: .6875rem;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: #6b7280;
+}
+.metric-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+  color: #f9fafb;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Period buttons ─────────────────────────────────────── */
+.period-btn {
+  padding: .25rem .6rem;
+  border-radius: .4rem;
+  font-size: .75rem;
+  font-weight: 500;
+  color: #6b7280;
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: color .15s, background .15s, border-color .15s;
+}
+.period-btn:hover       { color: #e5e7eb; background: #1c1c35; }
+.period-btn-active      { color: #e0e7ff; background: #1c1c35; border-color: #4f46e5; }
+
+/* Financials period toggle */
+.fin-period-btn {
+  padding: .2rem .6rem;
+  border-radius: .375rem;
+  font-weight: 500;
+  color: #6b7280;
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: color .15s, background .15s, border-color .15s;
+}
+.fin-period-btn:hover  { color: #e5e7eb; }
+.fin-period-active     { color: #818cf8; border-color: #4338ca; background: rgba(67,56,202,.15); }
+
+/* ── Skeleton loader ────────────────────────────────────── */
+@keyframes shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, #15152a 25%, #1c1c35 50%, #15152a 75%);
+  background-size: 800px 100%;
+  animation: shimmer 1.5s infinite linear;
+  border-radius: .375rem;
+}
+.skeleton-text { opacity: .4; }
+
+/* ── Tooltip button ─────────────────────────────────────── */
+.tooltip-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 9999px;
+  font-size: .6rem;
+  font-weight: 700;
+  color: #6b7280;
+  border: 1px solid #2e2e52;
+  background: #1c1c35;
+  cursor: help;
+  vertical-align: middle;
+  transition: color .15s, border-color .15s;
+}
+.tooltip-btn:hover { color: #818cf8; border-color: #6366f1; }
+
+/* ── Buttons ────────────────────────────────────────────── */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: .375rem;
+  padding: .6rem 1.2rem;
+  border-radius: .625rem;
+  background: #4f46e5;
+  color: #fff;
+  font-size: .875rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: background .2s, box-shadow .2s;
+}
+.btn-primary:hover { background: #4338ca; box-shadow: 0 4px 12px rgba(79,70,229,.4); }
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: .375rem;
+  padding: .6rem 1.2rem;
+  border-radius: .625rem;
+  background: transparent;
+  color: #9ca3af;
+  font-size: .875rem;
+  font-weight: 500;
+  text-decoration: none;
+  border: 1px solid #2e2e52;
+  transition: color .2s, border-color .2s;
+}
+.btn-secondary:hover { color: #fff; border-color: #6366f1; }
+
+/* ── Watchlist panel transition ─────────────────────────── */
+#watchlist-panel.open {
+  transform: translateX(0);
+}
+#watchlist-overlay.open {
+  display: block;
+}
+
+/* ── Chart container reset ──────────────────────────────── */
+.apexcharts-canvas {
+  background: transparent !important;
+}
+.apexcharts-tooltip {
+  background: #15152a !important;
+  border: 1px solid #2e2e52 !important;
+  border-radius: .75rem !important;
+  box-shadow: 0 8px 32px rgba(0,0,0,.5) !important;
+}
+.apexcharts-tooltip-title {
+  background: #1c1c35 !important;
+  border-bottom: 1px solid #2e2e52 !important;
+  color: #f3f4f6 !important;
+  font-size: .75rem !important;
+}
+.apexcharts-menu {
+  background: #15152a !important;
+  border: 1px solid #2e2e52 !important;
+}
+.apexcharts-menu-item:hover { background: #1c1c35 !important; }
+
+/* ── Responsive line-clamp ──────────────────────────────── */
+.line-clamp-8 {
+  display: -webkit-box;
+  -webkit-line-clamp: 8;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ── Glow effects ───────────────────────────────────────── */
+.glow-brand { box-shadow: 0 0 20px rgba(99,102,241,.25); }
+.glow-up    { box-shadow: 0 0 20px rgba(34,197,94,.2);  }
+
+/* ── Number formatting ──────────────────────────────────── */
+.tabular-nums { font-variant-numeric: tabular-nums; }
+
+/* ── Smooth page transitions ────────────────────────────── */
+html { scroll-behavior: smooth; }
+
+/* ── Mobile improvements ────────────────────────────────── */
+@media (max-width: 640px) {
+  .metric-value { font-size: 1.25rem; }
+  .card { border-radius: .75rem; }
+}
+
+/* ── Focus ring ─────────────────────────────────────────── */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid #4f46e5;
+  outline-offset: 2px;
+}
