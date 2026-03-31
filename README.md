@@ -46,9 +46,11 @@ cd Webpage-stocks-
 ### 2. Create virtual environment
 
 ```bash
-python3 -m venv .venv
+python3 -m venv .venv            # Linux / macOS
 source .venv/bin/activate        # Linux / macOS
-# .venv\Scripts\activate         # Windows
+
+py -m venv .venv              # Windows
+.venv\Scripts\activate        # Windows
 ```
 
 ### 3. Install dependencies
