@@ -64,6 +64,12 @@ def dividend_calendar():
     return render_template("calendar.html", page="calendar")
 
 
+@app.route("/watchlist")
+def watchlist_page():
+    """Watchlist page — stocks are supplied client-side from localStorage."""
+    return render_template("watchlist.html", page="watchlist")
+
+
 # ════════════════════════════════════════════════════════════
 # JSON API endpoints
 # ════════════════════════════════════════════════════════════

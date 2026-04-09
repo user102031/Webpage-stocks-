@@ -88,9 +88,10 @@
 
         <!-- Desktop nav links -->
         <div class="hidden md:flex items-center gap-1">
-          <a href="/"          class="nav-link {% if page=='dashboard' %}nav-link-active{% endif %}">Dashboard</a>
-          <a href="/screener"  class="nav-link {% if page=='screener'  %}nav-link-active{% endif %}">Screener</a>
-          <a href="/calendar"  class="nav-link {% if page=='calendar'  %}nav-link-active{% endif %}">Dividends</a>
+          <a href="/"           class="nav-link {% if page=='dashboard' %}nav-link-active{% endif %}">Dashboard</a>
+          <a href="/screener"   class="nav-link {% if page=='screener'  %}nav-link-active{% endif %}">Screener</a>
+          <a href="/calendar"   class="nav-link {% if page=='calendar'  %}nav-link-active{% endif %}">Dividends</a>
+          <a href="/watchlist"  class="nav-link {% if page=='watchlist' %}nav-link-active{% endif %}">Watchlist</a>
         </div>
 
         <!-- Right area: market status + mobile menu btn -->
@@ -100,16 +101,16 @@
             <span id="market-status-label" class="text-gray-400">Oslo Børs</span>
           </div>
 
-          <!-- Watchlist button -->
-          <button onclick="window.watchlistPanel?.toggle()"
-                  class="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-600 hover:bg-surface-500 text-sm text-gray-300 transition-colors">
+          <!-- Watchlist quick-link badge -->
+          <a href="/watchlist"
+             class="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-600 hover:bg-surface-500 text-sm text-gray-300 transition-colors">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                 d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
             </svg>
             <span>Watchlist</span>
             <span id="watchlist-count" class="bg-brand-600 text-white text-xs rounded-full px-1.5 py-0.5 leading-none hidden">0</span>
-          </button>
+          </a>
 
           <!-- Mobile hamburger -->
           <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-surface-600 transition-colors">
@@ -125,9 +126,10 @@
     <!-- Mobile nav -->
     <div id="mobile-menu" class="hidden md:hidden border-t border-surface-600 bg-surface-800">
       <div class="px-4 py-3 flex flex-col gap-1">
-        <a href="/"         class="mobile-nav-link {% if page=='dashboard' %}mobile-nav-active{% endif %}">Dashboard</a>
-        <a href="/screener" class="mobile-nav-link {% if page=='screener'  %}mobile-nav-active{% endif %}">Screener</a>
-        <a href="/calendar" class="mobile-nav-link {% if page=='calendar'  %}mobile-nav-active{% endif %}">Dividends</a>
+        <a href="/"          class="mobile-nav-link {% if page=='dashboard' %}mobile-nav-active{% endif %}">Dashboard</a>
+        <a href="/screener"  class="mobile-nav-link {% if page=='screener'  %}mobile-nav-active{% endif %}">Screener</a>
+        <a href="/calendar"  class="mobile-nav-link {% if page=='calendar'  %}mobile-nav-active{% endif %}">Dividends</a>
+        <a href="/watchlist" class="mobile-nav-link {% if page=='watchlist' %}mobile-nav-active{% endif %}">Watchlist</a>
       </div>
     </div>
   </nav>

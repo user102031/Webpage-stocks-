@@ -1,0 +1,472 @@
+{% extends "base.html" %}
+{% block title %}Watchlist — OsloBørsen{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
+
+  <!-- ── Header ─────────────────────────────────────────── -->
+  <div class="flex items-start justify-between mb-8 gap-4">
+    <div>
+      <div class="flex items-center gap-3 mb-2">
+        <div class="w-1 h-8 bg-brand-500 rounded-full"></div>
+        <h1 class="text-3xl font-bold text-white tracking-tight">My Watchlist</h1>
+      </div>
+      <p class="text-gray-400 ml-4 text-sm">Stocks you're tracking — saved in your browser</p>
+    </div>
+    <a href="/screener"
+       class="shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl border border-brand-600/40
+              bg-brand-600/10 hover:bg-brand-600/20 text-brand-400 text-sm font-medium transition-colors">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+      </svg>
+      Add stocks
+    </a>
+  </div>
+
+  <!-- ── Empty state ─────────────────────────────────────── -->
+  <div id="wl-empty" class="hidden">
+    <div class="card p-16 text-center">
+      <div class="w-16 h-16 rounded-2xl bg-surface-600 flex items-center justify-center mx-auto mb-5">
+        <svg class="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+            d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+        </svg>
+      </div>
+      <h2 class="text-white font-semibold text-lg mb-2">Your watchlist is empty</h2>
+      <p class="text-gray-400 text-sm mb-6 max-w-sm mx-auto">
+        Browse the screener and click the bookmark icon on any stock to add it here.
+      </p>
+      <a href="/screener" class="btn-primary inline-flex">Browse Screener</a>
+    </div>
+  </div>
+
+  <!-- ── Content (shown when list has items) ─────────────── -->
+  <div id="wl-content" class="hidden space-y-6">
+
+    <!-- Summary stats row -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4" id="wl-stats">
+      <div class="card p-4">
+        <div class="text-xs uppercase tracking-widest text-gray-500 mb-2 font-semibold">Stocks</div>
+        <div id="wl-stat-count" class="text-2xl font-bold text-white">—</div>
+      </div>
+      <div class="card p-4">
+        <div class="text-xs uppercase tracking-widest text-gray-500 mb-2 font-semibold">Avg Yield</div>
+        <div id="wl-stat-yield" class="text-2xl font-bold text-up">—</div>
+      </div>
+      <div class="card p-4">
+        <div class="text-xs uppercase tracking-widest text-gray-500 mb-2 font-semibold">Avg P/E</div>
+        <div id="wl-stat-pe" class="text-2xl font-bold text-brand-400">—</div>
+      </div>
+      <div class="card p-4">
+        <div class="text-xs uppercase tracking-widest text-gray-500 mb-2 font-semibold">Today</div>
+        <div id="wl-stat-change" class="text-2xl font-bold">—</div>
+      </div>
+    </div>
+
+    <!-- Performance comparison chart -->
+    <div class="card p-6">
+      <div class="flex items-center justify-between mb-5">
+        <div>
+          <h2 class="text-white font-semibold">Price Performance</h2>
+          <p class="text-gray-500 text-xs mt-0.5">Indexed to 100 — relative comparison</p>
+        </div>
+        <div class="flex gap-1" id="wl-chart-periods">
+          <button class="period-btn" data-period="1M">1M</button>
+          <button class="period-btn period-btn-active" data-period="3M">3M</button>
+          <button class="period-btn" data-period="1Y">1Y</button>
+        </div>
+      </div>
+      <div id="wl-perf-chart" class="h-64"></div>
+    </div>
+
+    <!-- Stock cards grid -->
+    <div>
+      <h2 class="text-white font-semibold mb-4">Holdings Overview</h2>
+      <div id="wl-cards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+    </div>
+
+    <!-- Detailed metrics table -->
+    <div class="card overflow-hidden">
+      <div class="p-5 border-b border-surface-600 flex items-center justify-between">
+        <h2 class="text-white font-semibold text-sm">Detailed Metrics</h2>
+        <button id="wl-clear-btn"
+                class="text-xs text-gray-600 hover:text-red-400 transition-colors flex items-center gap-1">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+          Clear all
+        </button>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full min-w-[800px]">
+          <thead>
+            <tr class="text-left border-b border-surface-600">
+              <th class="th-cell">Company</th>
+              <th class="th-cell">Price</th>
+              <th class="th-cell">Change</th>
+              <th class="th-cell">Yield <button class="tooltip-btn" data-tip="dividend_yield">?</button></th>
+              <th class="th-cell">P/E <button class="tooltip-btn" data-tip="pe_ratio">?</button></th>
+              <th class="th-cell">P/B <button class="tooltip-btn" data-tip="pb_ratio">?</button></th>
+              <th class="th-cell">Market Cap</th>
+              <th class="th-cell">Score <button class="tooltip-btn" data-tip="score">?</button></th>
+              <th class="th-cell">Remove</th>
+            </tr>
+          </thead>
+          <tbody id="wl-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /wl-content -->
+
+  <!-- Loading state -->
+  <div id="wl-loading" class="space-y-4">
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div class="skeleton h-20 rounded-xl"></div>
+      <div class="skeleton h-20 rounded-xl"></div>
+      <div class="skeleton h-20 rounded-xl"></div>
+      <div class="skeleton h-20 rounded-xl"></div>
+    </div>
+    <div class="skeleton h-72 rounded-2xl"></div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div class="skeleton h-40 rounded-xl"></div>
+      <div class="skeleton h-40 rounded-xl"></div>
+      <div class="skeleton h-40 rounded-xl"></div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── Colour palette for multi-line chart ───────────────────
+const LINE_COLORS = ['#6366f1','#22c55e','#f59e0b','#ef4444','#06b6d4','#a855f7','#f97316','#14b8a6'];
+
+let wlData      = [];   // fetched quote objects
+let perfChart   = null;
+let currentPeriod = '3M';
+
+// ── Bootstrap ─────────────────────────────────────────────
+(async function init() {
+  const tickers = watchlist.all();
+
+  document.getElementById('wl-loading').classList.remove('hidden');
+
+  if (!tickers.length) {
+    document.getElementById('wl-loading').classList.add('hidden');
+    document.getElementById('wl-empty').classList.remove('hidden');
+    return;
+  }
+
+  // Fetch all quotes in parallel
+  const results = await Promise.allSettled(
+    tickers.map(t => fetch(`/api/quote/${t}`).then(r => r.json()))
+  );
+
+  wlData = results
+    .map(r => r.status === 'fulfilled' ? r.value : null)
+    .filter(Boolean);
+
+  document.getElementById('wl-loading').classList.add('hidden');
+  document.getElementById('wl-content').classList.remove('hidden');
+
+  renderStats();
+  renderCards();
+  renderTable();
+  loadPerfChart(currentPeriod);
+
+  // Period switcher
+  document.getElementById('wl-chart-periods').addEventListener('click', e => {
+    const btn = e.target.closest('[data-period]');
+    if (!btn) return;
+    document.querySelectorAll('#wl-chart-periods .period-btn')
+      .forEach(b => b.classList.remove('period-btn-active'));
+    btn.classList.add('period-btn-active');
+    currentPeriod = btn.dataset.period;
+    loadPerfChart(currentPeriod);
+  });
+
+  // Clear all
+  document.getElementById('wl-clear-btn').addEventListener('click', () => {
+    if (!confirm('Remove all stocks from your watchlist?')) return;
+    watchlist.all().forEach(t => watchlist.remove(t));
+    location.reload();
+  });
+})();
+
+// ── Stats row ─────────────────────────────────────────────
+function renderStats() {
+  document.getElementById('wl-stat-count').textContent = wlData.length;
+
+  const yields   = wlData.filter(s => s.dividend_yield != null).map(s => s.dividend_yield);
+  const pes      = wlData.filter(s => s.pe_ratio != null && s.pe_ratio > 0).map(s => s.pe_ratio);
+  const changes  = wlData.filter(s => s.change_pct != null).map(s => s.change_pct);
+  const avgChange = changes.length ? changes.reduce((a,b)=>a+b,0)/changes.length : null;
+
+  document.getElementById('wl-stat-yield').textContent =
+    yields.length ? (yields.reduce((a,b)=>a+b,0)/yields.length).toFixed(2)+'%' : '—';
+
+  document.getElementById('wl-stat-pe').textContent =
+    pes.length ? (pes.reduce((a,b)=>a+b,0)/pes.length).toFixed(1)+'x' : '—';
+
+  const changeEl  = document.getElementById('wl-stat-change');
+  if (avgChange != null) {
+    const sign = avgChange >= 0 ? '+' : '';
+    changeEl.textContent = sign + avgChange.toFixed(2) + '%';
+    changeEl.className   = `text-2xl font-bold ${avgChange >= 0 ? 'text-up' : 'text-down'}`;
+  } else {
+    changeEl.textContent = '—';
+  }
+}
+
+// ── Stock cards ───────────────────────────────────────────
+function renderCards() {
+  const container = document.getElementById('wl-cards');
+  container.innerHTML = wlData.map((s, i) => {
+    const changeClass = s.change_pct > 0 ? 'text-up' : s.change_pct < 0 ? 'text-down' : 'text-gray-400';
+    const sign        = s.change_pct > 0 ? '+' : '';
+    const accent      = LINE_COLORS[i % LINE_COLORS.length];
+
+    const scoreHtml = s.score != null
+      ? `<div class="text-xs font-semibold px-2 py-0.5 rounded-full border ${
+          s.score>=60 ? 'bg-up/10 text-up border-up/20'
+          : s.score>=35 ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20'
+          : 'bg-down/10 text-down border-down/20'
+        }">Score ${s.score}</div>`
+      : '';
+
+    return `
+      <div class="card p-5 flex flex-col gap-4 hover:border-surface-400 transition-all group">
+        <!-- Header -->
+        <div class="flex items-start justify-between gap-3">
+          <a href="/stock/${s.ticker}" class="flex items-center gap-3 flex-1 min-w-0">
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold shrink-0"
+                 style="background:${accent}22; color:${accent}; border:1px solid ${accent}44">
+              ${s.ticker.replace('.OL','').slice(0,3)}
+            </div>
+            <div class="min-w-0">
+              <div class="text-white font-semibold text-sm truncate group-hover:text-brand-400 transition-colors">
+                ${escHtml(s.name || s.ticker)}
+              </div>
+              <div class="text-gray-500 text-xs font-mono">${escHtml(s.ticker)}</div>
+            </div>
+          </a>
+          <button class="wl-remove-btn p-1.5 rounded-lg hover:bg-red-500/10 hover:text-red-400 text-gray-600 transition-colors shrink-0"
+                  data-ticker="${s.ticker}" title="Remove from watchlist">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <!-- Price -->
+        <div class="flex items-end justify-between">
+          <div>
+            <div class="text-2xl font-bold font-mono text-white tabular-nums">
+              ${s.price != null ? s.price.toFixed(2) : '—'}
+            </div>
+            <div class="text-xs text-gray-500">${s.currency || 'NOK'}</div>
+          </div>
+          <div class="text-right">
+            <div class="text-sm font-mono font-semibold tabular-nums ${changeClass}">
+              ${s.change_pct != null ? sign+s.change_pct.toFixed(2)+'%' : '—'}
+            </div>
+            <div class="text-xs text-gray-500">today</div>
+          </div>
+        </div>
+
+        <!-- Mini metrics -->
+        <div class="grid grid-cols-3 gap-2 pt-3 border-t border-surface-600">
+          <div class="text-center">
+            <div class="text-xs text-gray-500 mb-0.5">Yield</div>
+            <div class="text-sm font-mono font-semibold ${s.dividend_yield ? 'text-up' : 'text-gray-600'}">
+              ${s.dividend_yield != null ? s.dividend_yield.toFixed(1)+'%' : '—'}
+            </div>
+          </div>
+          <div class="text-center border-x border-surface-600">
+            <div class="text-xs text-gray-500 mb-0.5">P/E</div>
+            <div class="text-sm font-mono text-gray-200">
+              ${s.pe_ratio != null ? s.pe_ratio.toFixed(1) : '—'}
+            </div>
+          </div>
+          <div class="text-center">
+            <div class="text-xs text-gray-500 mb-0.5">Mkt Cap</div>
+            <div class="text-sm font-mono text-gray-200">${s.market_cap_fmt || '—'}</div>
+          </div>
+        </div>
+
+        <!-- Score + sector -->
+        <div class="flex items-center justify-between">
+          <span class="text-xs text-gray-600">${escHtml(s.sector || '')}</span>
+          ${scoreHtml}
+        </div>
+      </div>`;
+  }).join('');
+
+  // Remove buttons
+  document.querySelectorAll('.wl-remove-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      watchlist.remove(btn.dataset.ticker);
+      location.reload();
+    });
+  });
+}
+
+// ── Table ─────────────────────────────────────────────────
+function renderTable() {
+  const tbody = document.getElementById('wl-table-body');
+  tbody.innerHTML = wlData.map(s => {
+    const changeClass = s.change_pct > 0 ? 'text-up' : s.change_pct < 0 ? 'text-down' : 'text-gray-400';
+    const sign        = s.change_pct > 0 ? '+' : '';
+    const scoreHtml   = s.score != null
+      ? `<span class="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold border ${
+          s.score>=60 ? 'bg-up/20 text-up border-up/30'
+          : s.score>=35 ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'
+          : 'bg-down/20 text-down border-down/30'
+        }">${s.score}</span>`
+      : '<span class="text-gray-600">—</span>';
+
+    return `
+      <tr class="border-b border-surface-700 hover:bg-surface-700/40 transition-colors cursor-pointer"
+          onclick="window.location.href='/stock/${s.ticker}'">
+        <td class="px-4 py-3">
+          <div class="text-sm font-medium text-white">${escHtml(s.name || s.ticker)}</div>
+          <div class="text-xs text-gray-500 font-mono">${escHtml(s.ticker)}</div>
+        </td>
+        <td class="px-4 py-3 font-mono text-sm text-white tabular-nums">
+          ${s.price != null ? s.price.toFixed(2)+' '+(s.currency||'NOK') : '<span class="text-gray-600">—</span>'}
+        </td>
+        <td class="px-4 py-3 font-mono text-sm ${changeClass} tabular-nums">
+          ${s.change_pct != null ? sign+s.change_pct.toFixed(2)+'%' : '<span class="text-gray-600">—</span>'}
+        </td>
+        <td class="px-4 py-3 font-mono text-sm tabular-nums">
+          ${s.dividend_yield != null
+            ? `<span class="text-up font-semibold">${s.dividend_yield.toFixed(2)}%</span>`
+            : '<span class="text-gray-600">—</span>'}
+        </td>
+        <td class="px-4 py-3 font-mono text-sm text-gray-200">
+          ${s.pe_ratio != null ? s.pe_ratio.toFixed(1) : '<span class="text-gray-600">—</span>'}
+        </td>
+        <td class="px-4 py-3 font-mono text-sm text-gray-200">
+          ${s.pb_ratio != null ? s.pb_ratio.toFixed(2) : '<span class="text-gray-600">—</span>'}
+        </td>
+        <td class="px-4 py-3 text-sm text-gray-300">${s.market_cap_fmt || '<span class="text-gray-600">—</span>'}</td>
+        <td class="px-4 py-3">${scoreHtml}</td>
+        <td class="px-4 py-3" onclick="event.stopPropagation()">
+          <button class="wl-remove-tbl p-1.5 rounded hover:bg-red-500/10 hover:text-red-400 text-gray-600 transition-colors"
+                  data-ticker="${s.ticker}" title="Remove">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </td>
+      </tr>`;
+  }).join('');
+
+  document.querySelectorAll('.wl-remove-tbl').forEach(btn => {
+    btn.addEventListener('click', () => {
+      watchlist.remove(btn.dataset.ticker);
+      location.reload();
+    });
+  });
+}
+
+// ── Performance comparison chart ──────────────────────────
+async function loadPerfChart(period) {
+  if (!wlData.length) return;
+
+  const container = document.getElementById('wl-perf-chart');
+  container.innerHTML = '';  // clear
+
+  // Fetch history for all watchlist tickers in parallel
+  const histories = await Promise.allSettled(
+    wlData.map(s =>
+      fetch(`/api/history/${s.ticker}?period=${period}`)
+        .then(r => r.json())
+    )
+  );
+
+  const series = [];
+  histories.forEach((res, i) => {
+    if (res.status !== 'fulfilled') return;
+    const rows = res.value.data || [];
+    if (!rows.length) return;
+
+    const base = rows[0].c;
+    if (!base) return;
+
+    series.push({
+      name: wlData[i].ticker,
+      data: rows.map(d => ({
+        x: new Date(d.x).getTime(),
+        y: parseFloat(((d.c / base) * 100).toFixed(2)),
+      })),
+    });
+  });
+
+  if (!series.length) {
+    container.innerHTML = '<p class="text-gray-500 text-sm text-center pt-20">No price history available.</p>';
+    return;
+  }
+
+  const opts = {
+    chart: {
+      type: 'line',
+      height: 256,
+      background: 'transparent',
+      toolbar: { show: false },
+      animations: { enabled: true, speed: 500 },
+    },
+    series,
+    colors: LINE_COLORS,
+    stroke: { curve: 'smooth', width: 2 },
+    xaxis: {
+      type: 'datetime',
+      labels: { style: { colors: '#6b7280', fontSize: '11px' } },
+      axisBorder: { show: false },
+      axisTicks: { show: false },
+    },
+    yaxis: {
+      labels: {
+        style: { colors: '#6b7280', fontSize: '11px' },
+        formatter: v => v.toFixed(0),
+      },
+      title: { text: 'Indexed (100 = start)', style: { color: '#6b7280', fontSize: '10px' } },
+      opposite: true,
+    },
+    grid: { borderColor: '#1c1c35', strokeDashArray: 4 },
+    tooltip: {
+      theme: 'dark',
+      shared: true,
+      x: { format: 'dd MMM yyyy' },
+      y: { formatter: v => v.toFixed(2) },
+    },
+    legend: {
+      labels: { colors: '#9ca3af' },
+      position: 'top',
+      horizontalAlign: 'left',
+    },
+    // Baseline reference line at 100
+    annotations: {
+      yaxis: [{
+        y: 100,
+        borderColor: '#374151',
+        strokeDashArray: 4,
+        label: { text: 'Baseline', style: { color: '#6b7280', background: 'transparent', fontSize: '10px' } },
+      }],
+    },
+    theme: { mode: 'dark' },
+  };
+
+  if (perfChart) perfChart.destroy();
+  perfChart = new ApexCharts(container, opts);
+  perfChart.render();
+}
+
+function escHtml(str) {
+  return String(str ?? '').replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+</script>
+{% endblock %}
