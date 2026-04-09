@@ -5,6 +5,7 @@ All public functions return plain Python dicts/lists (JSON-serialisable).
 
 import logging
 import math
+import time
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -115,28 +116,41 @@ def get_quote(ticker: str) -> dict:
         "error":          None,
     }
 
-    try:
-        tk = yf.Ticker(ticker)
-        info = tk.info or {}
+    # Retry once on failure — Yahoo Finance can return empty on the first call
+    for attempt in range(2):
+        try:
+            tk   = yf.Ticker(ticker)
+            info = tk.info or {}
 
-        result["price"]          = _safe(info.get("currentPrice") or info.get("regularMarketPrice"))
-        result["currency"]       = info.get("currency", "NOK")
-        result["change_pct"]     = _safe(info.get("regularMarketChangePercent"))
-        result["dividend_yield"] = _yield_pct(info.get("dividendYield"))
-        result["pe_ratio"]       = _safe(info.get("trailingPE") or info.get("forwardPE"))
-        result["pb_ratio"]       = _safe(info.get("priceToBook"))
-        result["eps"]            = _safe(info.get("trailingEps"))
-        result["market_cap"]     = _safe(info.get("marketCap"))
-        result["market_cap_fmt"] = _fmt_large(result["market_cap"])
-        result["week52_high"]    = _safe(info.get("fiftyTwoWeekHigh"))
-        result["week52_low"]     = _safe(info.get("fiftyTwoWeekLow"))
-        result["volume"]         = _safe(info.get("volume"))
-        result["avg_volume"]     = _safe(info.get("averageVolume"))
-        result["score"]          = _compute_score(result)
+            # If the dict has no useful data, treat as failure and retry
+            if not info.get("regularMarketPrice") and not info.get("currentPrice"):
+                if attempt == 0:
+                    time.sleep(1.0)
+                    continue
 
-    except Exception as exc:
-        logger.warning("Quote fetch failed for %s: %s", ticker, exc)
-        result["error"] = str(exc)
+            result["price"]          = _safe(info.get("currentPrice") or info.get("regularMarketPrice"))
+            result["currency"]       = info.get("currency", "NOK")
+            result["change_pct"]     = _safe(info.get("regularMarketChangePercent"))
+            result["dividend_yield"] = _yield_pct(info.get("dividendYield"))
+            result["pe_ratio"]       = _safe(info.get("trailingPE") or info.get("forwardPE"))
+            result["pb_ratio"]       = _safe(info.get("priceToBook"))
+            result["eps"]            = _safe(info.get("trailingEps"))
+            result["market_cap"]     = _safe(info.get("marketCap"))
+            result["market_cap_fmt"] = _fmt_large(result["market_cap"])
+            result["week52_high"]    = _safe(info.get("fiftyTwoWeekHigh"))
+            result["week52_low"]     = _safe(info.get("fiftyTwoWeekLow"))
+            result["volume"]         = _safe(info.get("volume"))
+            result["avg_volume"]     = _safe(info.get("averageVolume"))
+            result["score"]          = _compute_score(result)
+            break  # success
+
+        except Exception as exc:
+            if attempt == 0:
+                logger.info("Quote attempt 1 failed for %s, retrying… (%s)", ticker, exc)
+                time.sleep(1.5)
+            else:
+                logger.warning("Quote fetch failed for %s: %s", ticker, exc)
+                result["error"] = str(exc)
 
     cache.set(cache_key, result, ttl=cache.TTL_QUOTE)
     return result
@@ -189,8 +203,13 @@ def get_screener_data() -> list[dict]:
         return cached
 
     results = []
-    for stock in OSLO_STOCKS:
+    for i, stock in enumerate(OSLO_STOCKS):
         ticker = stock["ticker"]
+        # Stagger requests so Yahoo Finance doesn't rate-limit us.
+        # Every 5th ticker we pause briefly; this adds ~6 s for 45 stocks
+        # but means all data arrives reliably.
+        if i > 0 and i % 5 == 0:
+            time.sleep(0.8)
         try:
             q = get_quote(ticker)
             results.append(q)
