@@ -52,9 +52,31 @@ def _fmt_large(num) -> Optional[str]:
 
 
 def _pct(val) -> Optional[float]:
-    """Convert a decimal ratio to percentage rounded to 2 dp."""
+    """Convert a decimal ratio (0.05) to percentage (5.0).
+    yfinance is inconsistent: some fields come back already as percentages
+    for certain exchange suffixes (.OL, .ST, etc.).  Values whose absolute
+    magnitude exceeds 1 are assumed to already be in percentage form.
+    """
     v = _safe(val)
-    return round(v * 100, 2) if v is not None else None
+    if v is None:
+        return None
+    if abs(v) > 1:          # e.g. 5.0 → already 5 %, just round
+        return round(float(v), 2)
+    return round(float(v) * 100, 2)
+
+
+def _yield_pct(val) -> Optional[float]:
+    """Dividend yield normalised to percentage.
+    dividendYield from yfinance can be 0.05 (decimal) OR 5.0 (already %).
+    Dividend yields above ~50 % are unrealistic, so anything > 1 is treated
+    as already being in percentage form.
+    """
+    v = _safe(val)
+    if v is None:
+        return None
+    if v > 1:               # e.g. 5.0 → 5 %
+        return round(float(v), 2)
+    return round(float(v) * 100, 2)
 
 
 # ────────────────────────────────────────────────────────────
@@ -100,7 +122,7 @@ def get_quote(ticker: str) -> dict:
         result["price"]          = _safe(info.get("currentPrice") or info.get("regularMarketPrice"))
         result["currency"]       = info.get("currency", "NOK")
         result["change_pct"]     = _safe(info.get("regularMarketChangePercent"))
-        result["dividend_yield"] = _pct(info.get("dividendYield"))
+        result["dividend_yield"] = _yield_pct(info.get("dividendYield"))
         result["pe_ratio"]       = _safe(info.get("trailingPE") or info.get("forwardPE"))
         result["pb_ratio"]       = _safe(info.get("priceToBook"))
         result["eps"]            = _safe(info.get("trailingEps"))
@@ -397,7 +419,7 @@ def get_dividend_calendar() -> list[dict]:
 
             ex_date_ts = info.get("exDividendDate")
             div_rate   = _safe(info.get("dividendRate"))
-            div_yield  = _pct(info.get("dividendYield"))
+            div_yield  = _yield_pct(info.get("dividendYield"))
 
             if ex_date_ts:
                 ex_date = datetime.utcfromtimestamp(ex_date_ts).date()
