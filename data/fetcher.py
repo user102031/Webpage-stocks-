@@ -1,6 +1,8 @@
 """
 Data fetcher — wraps yfinance calls with caching and graceful error handling.
 All public functions return plain Python dicts/lists (JSON-serialisable).
+
+Supports multi-market via `market` parameter (NO, SE, DK, FI).
 """
 
 import logging
@@ -12,7 +14,10 @@ from typing import Optional
 import yfinance as yf
 
 from data import cache
-from data.stocks import OSLO_STOCKS, TICKER_MAP
+from data.stocks import (
+    OSLO_STOCKS, TICKER_MAP, ALL_TICKER_MAP,
+    MARKET_CONFIG, get_stocks_for_market, get_ticker_map_for_market,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +66,7 @@ def _pct(val) -> Optional[float]:
     v = _safe(val)
     if v is None:
         return None
-    if abs(v) > 1:          # e.g. 5.0 → already 5 %, just round
+    if abs(v) > 1:          # e.g. 5.0 -> already 5 %, just round
         return round(float(v), 2)
     return round(float(v) * 100, 2)
 
@@ -75,9 +80,33 @@ def _yield_pct(val) -> Optional[float]:
     v = _safe(val)
     if v is None:
         return None
-    if v > 1:               # e.g. 5.0 → 5 %
+    if v > 1:               # e.g. 5.0 -> 5 %
         return round(float(v), 2)
     return round(float(v) * 100, 2)
+
+
+def _try_fast_info(tk):
+    """Attempt to get basic price data from fast_info as a fallback."""
+    try:
+        fi = tk.fast_info
+        if fi is None:
+            return {}
+        result = {}
+        # fast_info attributes vary by yfinance version
+        for attr, key in [
+            ("last_price", "price"),
+            ("previous_close", "prev_close"),
+            ("market_cap", "market_cap"),
+            ("currency", "currency"),
+            ("fifty_day_average", "fifty_day_avg"),
+            ("two_hundred_day_average", "two_hundred_day_avg"),
+        ]:
+            val = getattr(fi, attr, None)
+            if val is not None:
+                result[key] = val
+        return result
+    except Exception:
+        return {}
 
 
 # ────────────────────────────────────────────────────────────
@@ -88,13 +117,14 @@ def get_quote(ticker: str) -> dict:
     """
     Fetch a fast-expiring summary for one ticker.
     Returns a dict with price, change, dividend yield, P/E, etc.
+    Falls back to fast_info if full .info fails.
     """
     cache_key = f"quote:{ticker}"
     cached = cache.get(cache_key)
     if cached is not None:
         return cached
 
-    meta = TICKER_MAP.get(ticker, {})
+    meta = ALL_TICKER_MAP.get(ticker, TICKER_MAP.get(ticker, {}))
     result = {
         "ticker":         ticker,
         "name":           meta.get("name", ticker),
@@ -116,15 +146,31 @@ def get_quote(ticker: str) -> dict:
         "error":          None,
     }
 
-    # Retry once on failure — Yahoo Finance can return empty on the first call
     for attempt in range(2):
         try:
             tk   = yf.Ticker(ticker)
             info = tk.info or {}
 
-            # If the dict has no useful data, treat as failure and retry
+            # If the dict has no useful data, try fast_info fallback
             if not info.get("regularMarketPrice") and not info.get("currentPrice"):
-                if attempt == 0:
+                fi = _try_fast_info(tk)
+                if fi.get("price"):
+                    result["price"]      = _safe(fi["price"])
+                    result["currency"]   = fi.get("currency", "NOK")
+                    result["market_cap"] = _safe(fi.get("market_cap"))
+                    result["market_cap_fmt"] = _fmt_large(result["market_cap"])
+                    # Still try to get more from info if available
+                    result["dividend_yield"] = _yield_pct(info.get("dividendYield"))
+                    result["pe_ratio"]       = _safe(info.get("trailingPE") or info.get("forwardPE"))
+                    result["pb_ratio"]       = _safe(info.get("priceToBook"))
+                    result["eps"]            = _safe(info.get("trailingEps"))
+                    result["week52_high"]    = _safe(info.get("fiftyTwoWeekHigh"))
+                    result["week52_low"]     = _safe(info.get("fiftyTwoWeekLow"))
+                    result["volume"]         = _safe(info.get("volume"))
+                    result["avg_volume"]     = _safe(info.get("averageVolume"))
+                    result["score"]          = _compute_score(result)
+                    break
+                elif attempt == 0:
                     time.sleep(1.0)
                     continue
 
@@ -146,7 +192,7 @@ def get_quote(ticker: str) -> dict:
 
         except Exception as exc:
             if attempt == 0:
-                logger.info("Quote attempt 1 failed for %s, retrying… (%s)", ticker, exc)
+                logger.info("Quote attempt 1 failed for %s, retrying... (%s)", ticker, exc)
                 time.sleep(1.5)
             else:
                 logger.warning("Quote fetch failed for %s: %s", ticker, exc)
@@ -166,48 +212,42 @@ def _compute_score(data: dict) -> Optional[int]:
 
     dy = data.get("dividend_yield")
     if dy is not None:
-        # Yield up to 10 % = 0-40 pts
         score += min(dy / 10 * 40, 40)
         components += 1
 
     pe = data.get("pe_ratio")
     if pe is not None and pe > 0:
-        # Lower P/E is better: P/E ≤ 10 → 30 pts, P/E ≥ 30 → 0 pts
         score += max(0, min(30, (30 - pe) / 20 * 30))
         components += 1
 
     pb = data.get("pb_ratio")
     if pb is not None and pb > 0:
-        # Lower P/B is better: P/B ≤ 1 → 30 pts, P/B ≥ 5 → 0 pts
         score += max(0, min(30, (5 - pb) / 4 * 30))
         components += 1
 
     if components == 0:
         return None
-    # Normalise to 0-100
     return round(score)
 
 
 # ────────────────────────────────────────────────────────────
-# Screener — all stocks
+# Screener — all stocks (market-aware)
 # ────────────────────────────────────────────────────────────
 
-def get_screener_data() -> list[dict]:
+def get_screener_data(market: str = "NO") -> list[dict]:
     """
-    Return quotes for every stock in the Oslo universe.
+    Return quotes for every stock in the given market.
     Results are cached as a whole for TTL_SCREENER seconds.
     """
-    cache_key = "screener:all"
+    cache_key = f"screener:{market}"
     cached = cache.get(cache_key)
     if cached is not None:
         return cached
 
+    stocks = get_stocks_for_market(market)
     results = []
-    for i, stock in enumerate(OSLO_STOCKS):
+    for i, stock in enumerate(stocks):
         ticker = stock["ticker"]
-        # Stagger requests so Yahoo Finance doesn't rate-limit us.
-        # Every 5th ticker we pause briefly; this adds ~6 s for 45 stocks
-        # but means all data arrives reliably.
         if i > 0 and i % 5 == 0:
             time.sleep(0.8)
         try:
@@ -259,7 +299,6 @@ def get_price_history(ticker: str, period: str = "1Y") -> dict:
             result = {"ticker": ticker, "period": period, "data": [], "error": "No data"}
         else:
             df = df.reset_index()
-            # Column name differs by interval
             date_col = "Datetime" if "Datetime" in df.columns else "Date"
             result = {
                 "ticker": ticker,
@@ -303,7 +342,6 @@ def get_dividend_history(ticker: str) -> dict:
         if divs is None or divs.empty:
             result = {"ticker": ticker, "annual": [], "raw": [], "error": None}
         else:
-            # Group by year
             divs.index = divs.index.tz_localize(None) if divs.index.tzinfo else divs.index
             annual = (
                 divs.groupby(divs.index.year)
@@ -399,7 +437,6 @@ def get_financials(ticker: str) -> dict:
         q_inc = _parse_stmt(tk.quarterly_income_stmt)
         q_cf  = _parse_cf(tk.quarterly_cash_flow)
         for row in q_inc:
-            row["period"] = col.strftime("%Y-Q%q") if False else row["period"]
             cf_data = q_cf.get(row["period"], {})
             row.update(cf_data)
         result["quarterly"] = q_inc
@@ -413,25 +450,27 @@ def get_financials(ticker: str) -> dict:
 
 
 # ────────────────────────────────────────────────────────────
-# Dividend calendar
+# Dividend calendar (market-aware)
 # ────────────────────────────────────────────────────────────
 
-def get_dividend_calendar() -> list[dict]:
+def get_dividend_calendar(market: str = "NO") -> list[dict]:
     """
-    Collect upcoming ex-dividend and payment dates across the universe.
+    Collect upcoming ex-dividend and payment dates across the market.
     Returns list sorted by ex-date.
     """
-    cache_key = "calendar:all"
+    cache_key = f"calendar:{market}"
     cached = cache.get(cache_key)
     if cached is not None:
         return cached
 
+    stocks = get_stocks_for_market(market)
     events = []
     today = datetime.utcnow().date()
-    cutoff = today + timedelta(days=365)
 
-    for stock in OSLO_STOCKS:
+    for i, stock in enumerate(stocks):
         ticker = stock["ticker"]
+        if i > 0 and i % 5 == 0:
+            time.sleep(0.8)
         try:
             tk = yf.Ticker(ticker)
             info = tk.info or {}
@@ -450,7 +489,7 @@ def get_dividend_calendar() -> list[dict]:
                         "ex_date":   str(ex_date),
                         "div_rate":  div_rate,
                         "div_yield": div_yield,
-                        "currency":  info.get("currency", "NOK"),
+                        "currency":  info.get("currency", MARKET_CONFIG.get(market, {}).get("currency", "NOK")),
                     })
         except Exception as exc:
             logger.debug("Calendar skip %s: %s", ticker, exc)
@@ -461,35 +500,32 @@ def get_dividend_calendar() -> list[dict]:
 
 
 # ────────────────────────────────────────────────────────────
-# Market summary (dashboard)
+# Market summary (dashboard) — market-aware
 # ────────────────────────────────────────────────────────────
 
-def get_market_summary() -> dict:
+def get_market_summary(market: str = "NO") -> dict:
     """
     Return top-5 by yield, top-5 by lowest P/E, and a naive sentiment.
     """
-    cache_key = "market:summary"
+    cache_key = f"market:summary:{market}"
     cached = cache.get(cache_key)
     if cached is not None:
         return cached
 
-    all_stocks = get_screener_data()
+    all_stocks = get_screener_data(market)
     valid = [s for s in all_stocks if not s.get("error") and s.get("price")]
 
-    # Top 5 highest dividend yield
     by_yield = sorted(
         [s for s in valid if s.get("dividend_yield") is not None],
         key=lambda s: s["dividend_yield"],
         reverse=True,
     )[:5]
 
-    # Top 5 lowest P/E (> 0)
     by_pe = sorted(
         [s for s in valid if s.get("pe_ratio") is not None and s["pe_ratio"] > 0],
         key=lambda s: s["pe_ratio"],
     )[:5]
 
-    # Sentiment: % of stocks with positive change today
     changes = [s["change_pct"] for s in valid if s.get("change_pct") is not None]
     if changes:
         positive = sum(1 for c in changes if c > 0)
@@ -499,16 +535,24 @@ def get_market_summary() -> dict:
         sentiment_pct = 50
         sentiment = "Neutral"
 
-    # Market overview: OSEBX proxy via OBX ETF if available
+    # Find proxy ticker for market chart (largest company)
+    mkt_cfg = MARKET_CONFIG.get(market, MARKET_CONFIG["NO"])
+    stocks = get_stocks_for_market(market)
+    proxy_ticker = stocks[0]["ticker"] if stocks else "EQNR.OL"
+
     summary = {
-        "top_yield":     by_yield,
-        "top_value_pe":  by_pe,
-        "sentiment":     sentiment,
-        "sentiment_pct": sentiment_pct,
-        "total_stocks":  len(valid),
-        "advancing":     sum(1 for c in changes if c > 0),
-        "declining":     sum(1 for c in changes if c < 0),
-        "unchanged":     sum(1 for c in changes if c == 0),
+        "top_yield":      by_yield,
+        "top_value_pe":   by_pe,
+        "sentiment":      sentiment,
+        "sentiment_pct":  sentiment_pct,
+        "total_stocks":   len(valid),
+        "advancing":      sum(1 for c in changes if c > 0),
+        "declining":      sum(1 for c in changes if c < 0),
+        "unchanged":      sum(1 for c in changes if c == 0),
+        "proxy_ticker":   proxy_ticker,
+        "proxy_name":     stocks[0]["name"] if stocks else "Equinor",
+        "market_name":    mkt_cfg["name"],
+        "currency":       mkt_cfg["currency"],
     }
 
     cache.set(cache_key, summary, ttl=cache.TTL_SCREENER)
@@ -526,7 +570,7 @@ def get_stock_detail(ticker: str) -> dict:
     if cached is not None:
         return cached
 
-    meta  = TICKER_MAP.get(ticker, {"name": ticker, "sector": "Unknown"})
+    meta  = ALL_TICKER_MAP.get(ticker, TICKER_MAP.get(ticker, {"name": ticker, "sector": "Unknown"}))
     quote = get_quote(ticker)
 
     try:

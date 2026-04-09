@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Stock Screener — OsloBørsen{% endblock %}
+{% block title %}Stock Screener — Nordic Stock Analyzer{% endblock %}
 
 {% block content %}
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
@@ -10,7 +10,7 @@
       <div class="w-1 h-8 bg-brand-500 rounded-full"></div>
       <h1 class="text-3xl font-bold text-white tracking-tight">Stock Screener</h1>
     </div>
-    <p class="text-gray-400 ml-4 text-sm">Filter and sort Oslo Børs dividend stocks</p>
+    <p id="screener-subtitle" class="text-gray-400 ml-4 text-sm">Filter and sort dividend stocks</p>
   </div>
 
   <!-- ── Filter Bar ──────────────────────────────────────── -->
@@ -30,9 +30,6 @@
       <div>
         <select id="filter-sector" class="input-field w-full">
           <option value="">All Sectors</option>
-          {% for sector in sectors %}
-          <option value="{{ sector }}" {% if request.args.get('sector') == sector %}selected{% endif %}>{{ sector }}</option>
-          {% endfor %}
         </select>
       </div>
 
@@ -123,8 +120,25 @@ let sortDir = -1; // -1 = desc, 1 = asc
 // Load data
 (async () => {
   try {
-    const res = await fetch('/api/screener');
+    const mktCfg = marketSwitcher.getConfig();
+    document.getElementById('screener-subtitle').textContent =
+      `Filter and sort ${mktCfg.full} dividend stocks`;
+    const res = await apiFetch('/api/screener');
     allStocks = await res.json();
+
+    // Populate sector dropdown from data
+    const sectors = [...new Set(allStocks.map(s => s.sector).filter(Boolean))].sort();
+    const sectorEl = document.getElementById('filter-sector');
+    sectors.forEach(sec => {
+      const opt = document.createElement('option');
+      opt.value = sec;
+      opt.textContent = sec;
+      sectorEl.appendChild(opt);
+    });
+    // Re-apply URL param
+    const urlSector = new URLSearchParams(location.search).get('sector');
+    if (urlSector) sectorEl.value = urlSector;
+
     applyFiltersAndRender();
   } catch(e) {
     document.getElementById('screener-tbody').innerHTML =
@@ -164,10 +178,6 @@ document.querySelectorAll('.sortable').forEach(th => {
     applyFiltersAndRender();
   });
 });
-
-// URL params pre-fill
-const params = new URLSearchParams(location.search);
-if (params.get('sector')) sectorSelect.value = params.get('sector');
 
 function applyFiltersAndRender() {
   const q      = searchInput.value.toLowerCase().trim();

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Dashboard — OsloBørsen{% endblock %}
+{% block title %}Dashboard — Nordic Stock Analyzer{% endblock %}
 
 {% block content %}
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
@@ -10,7 +10,7 @@
       <div class="w-1 h-8 bg-brand-500 rounded-full"></div>
       <h1 class="text-3xl font-bold text-white tracking-tight">Market Overview</h1>
     </div>
-    <p class="text-gray-400 ml-4 text-sm">Oslo Børs — Real-time Norwegian equity data</p>
+    <p id="dash-subtitle" class="text-gray-400 ml-4 text-sm">Loading market data...</p>
   </div>
 
   <!-- ── Sentiment + Stats Row ──────────────────────────── -->
@@ -151,10 +151,16 @@
 <script>
 // ── Dashboard page logic ──────────────────────────────────
 (async function() {
+  const mktCfg = marketSwitcher.getConfig();
+
+  // Update subtitle with market name
+  document.getElementById('dash-subtitle').textContent =
+    `${mktCfg.full} — Real-time Nordic equity data`;
+
   // Fetch market summary
   let summary;
   try {
-    const res = await fetch('/api/summary');
+    const res = await apiFetch('/api/summary');
     summary = await res.json();
   } catch(e) {
     console.error('Summary fetch error', e);
@@ -199,14 +205,22 @@
   // Top 5 P/E list
   renderMiniList('top-pe-list', summary.top_value_pe || [], 'pe_ratio', 'x', 'brand-400');
 
-  // Market chart (EQNR proxy)
-  loadMarketChart('1M');
+  // Market chart (proxy ticker from summary)
+  const proxyTicker = summary.proxy_ticker || 'EQNR.OL';
+  const proxyName   = summary.proxy_name   || 'Equinor';
+  const mktName     = summary.market_name  || mktCfg.full;
+  document.querySelector('#market-chart').closest('.card').querySelector('h2').textContent =
+    `${mktName} — ${proxyTicker} (Proxy)`;
+  document.querySelector('#market-chart').closest('.card').querySelector('p').textContent =
+    `${proxyName} — largest listed company`;
+
+  loadMarketChart('1M', proxyTicker, summary.currency || mktCfg.currency);
   document.getElementById('market-chart-periods').addEventListener('click', (e) => {
     const btn = e.target.closest('[data-period]');
     if (!btn) return;
     document.querySelectorAll('#market-chart-periods .period-btn').forEach(b => b.classList.remove('period-btn-active'));
     btn.classList.add('period-btn-active');
-    loadMarketChart(btn.dataset.period);
+    loadMarketChart(btn.dataset.period, proxyTicker, summary.currency || mktCfg.currency);
   });
 
   // Sector grid
@@ -234,9 +248,11 @@ function renderMiniList(containerId, items, valueKey, suffix, colorClass) {
 }
 
 let marketChartInstance = null;
-async function loadMarketChart(period) {
+async function loadMarketChart(period, ticker, currency) {
+  ticker   = ticker   || 'EQNR.OL';
+  currency = currency || 'NOK';
   try {
-    const res = await fetch(`/api/history/EQNR.OL?period=${period}`);
+    const res = await fetch(`/api/history/${ticker}?period=${period}`);
     const data = await res.json();
 
     const prices = (data.data || []).map(d => ({ x: new Date(d.x).getTime(), y: d.c }));
@@ -255,7 +271,7 @@ async function loadMarketChart(period) {
         animations: { enabled: true, speed: 500 },
         sparkline: { enabled: false },
       },
-      series: [{ name: 'EQNR.OL', data: prices }],
+      series: [{ name: ticker, data: prices }],
       xaxis: {
         type: 'datetime',
         labels: { style: { colors: '#6b7280', fontSize: '11px' }, datetimeFormatter: { month: 'MMM', day: 'dd MMM' } },
@@ -263,7 +279,7 @@ async function loadMarketChart(period) {
         axisTicks: { show: false },
       },
       yaxis: {
-        labels: { style: { colors: '#6b7280', fontSize: '11px' }, formatter: v => 'NOK '+v.toFixed(0) },
+        labels: { style: { colors: '#6b7280', fontSize: '11px' }, formatter: v => currency+' '+v.toFixed(0) },
         opposite: true,
       },
       stroke: { curve: 'smooth', width: 2, colors: [isUp ? '#22c55e' : '#ef4444'] },
@@ -279,7 +295,7 @@ async function loadMarketChart(period) {
       tooltip: {
         theme: 'dark',
         x: { format: 'dd MMM yyyy' },
-        y: { formatter: v => 'NOK '+v.toFixed(2) },
+        y: { formatter: v => currency+' '+v.toFixed(2) },
       },
       theme: { mode: 'dark' },
     };
@@ -297,7 +313,7 @@ async function loadMarketChart(period) {
 async function buildSectorGrid(yieldStocks, peStocks) {
   // Fetch screener for sector counts
   try {
-    const res = await fetch('/api/screener');
+    const res = await apiFetch('/api/screener');
     const stocks = await res.json();
     const sectors = {};
     for (const s of stocks) {

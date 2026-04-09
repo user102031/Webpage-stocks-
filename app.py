@@ -1,54 +1,59 @@
 """
-Norwegian Stock Analyzer — Flask Application
-============================================
+Nordic Stock Analyzer — Flask Application
+==========================================
 Main entry point. Registers page routes and JSON API endpoints.
+Supports multi-market switching (NO, SE, DK, FI).
 """
 
 import logging
 from flask import Flask, render_template, jsonify, request, abort
 
 from data import fetcher
-from data.stocks import OSLO_STOCKS, SECTORS, TICKER_MAP
+from data.stocks import (
+    SECTORS, TICKER_MAP, ALL_TICKER_MAP,
+    MARKET_CONFIG, get_sectors_for_market,
+)
 
-# ── Logging ──────────────────────────────────────────────────
+# -- Logging --
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s  %(levelname)-8s  %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
 
-# ── App ───────────────────────────────────────────────────────
+# -- App --
 app = Flask(__name__)
 app.config["JSON_SORT_KEYS"] = False
 
 
-# ════════════════════════════════════════════════════════════
+def _get_market() -> str:
+    """Read market from query param, default NO."""
+    m = request.args.get("market", "NO").upper()
+    return m if m in MARKET_CONFIG else "NO"
+
+
+# ================================================================
 # Page routes
-# ════════════════════════════════════════════════════════════
+# ================================================================
 
 @app.route("/")
 def dashboard():
-    """Main dashboard / market overview."""
     return render_template("index.html", page="dashboard")
 
 
 @app.route("/screener")
 def screener():
-    """Stock screener page."""
-    return render_template(
-        "screener.html",
-        page="screener",
-        sectors=SECTORS,
-    )
+    market = _get_market()
+    sectors = get_sectors_for_market(market)
+    return render_template("screener.html", page="screener", sectors=sectors)
 
 
 @app.route("/stock/<ticker>")
 def stock_detail(ticker: str):
-    """Individual stock detail page."""
     ticker = ticker.upper()
-    if ticker not in TICKER_MAP:
+    if ticker not in ALL_TICKER_MAP:
         abort(404)
-    meta = TICKER_MAP[ticker]
+    meta = ALL_TICKER_MAP[ticker]
     return render_template(
         "stock.html",
         page="stock",
@@ -60,25 +65,23 @@ def stock_detail(ticker: str):
 
 @app.route("/calendar")
 def dividend_calendar():
-    """Dividend calendar page."""
     return render_template("calendar.html", page="calendar")
 
 
 @app.route("/watchlist")
 def watchlist_page():
-    """Watchlist page — stocks are supplied client-side from localStorage."""
     return render_template("watchlist.html", page="watchlist")
 
 
-# ════════════════════════════════════════════════════════════
+# ================================================================
 # JSON API endpoints
-# ════════════════════════════════════════════════════════════
+# ================================================================
 
 @app.route("/api/summary")
 def api_summary():
-    """Market summary for dashboard (top yields, top value, sentiment)."""
+    market = _get_market()
     try:
-        data = fetcher.get_market_summary()
+        data = fetcher.get_market_summary(market)
         return jsonify(data)
     except Exception as exc:
         logger.error("api_summary error: %s", exc)
@@ -87,14 +90,10 @@ def api_summary():
 
 @app.route("/api/screener")
 def api_screener():
-    """
-    All stocks with key metrics.
-    Optional query params: sector, min_yield, max_pe, q (search)
-    """
+    market = _get_market()
     try:
-        stocks = fetcher.get_screener_data()
+        stocks = fetcher.get_screener_data(market)
 
-        # Filter
         sector    = request.args.get("sector", "").strip()
         min_yield = request.args.get("min_yield", type=float)
         max_pe    = request.args.get("max_pe",    type=float)
@@ -120,7 +119,6 @@ def api_screener():
 
 @app.route("/api/quote/<ticker>")
 def api_quote(ticker: str):
-    """Single ticker quick quote."""
     ticker = ticker.upper()
     try:
         data = fetcher.get_quote(ticker)
@@ -132,7 +130,6 @@ def api_quote(ticker: str):
 
 @app.route("/api/detail/<ticker>")
 def api_detail(ticker: str):
-    """Full detail for individual stock page."""
     ticker = ticker.upper()
     try:
         data = fetcher.get_stock_detail(ticker)
@@ -144,10 +141,6 @@ def api_detail(ticker: str):
 
 @app.route("/api/history/<ticker>")
 def api_history(ticker: str):
-    """
-    Price history.
-    Query param: period (1W|1M|3M|1Y|5Y), default 1Y
-    """
     ticker = ticker.upper()
     period = request.args.get("period", "1Y").upper()
     try:
@@ -160,7 +153,6 @@ def api_history(ticker: str):
 
 @app.route("/api/dividends/<ticker>")
 def api_dividends(ticker: str):
-    """Dividend history for one ticker."""
     ticker = ticker.upper()
     try:
         data = fetcher.get_dividend_history(ticker)
@@ -172,7 +164,6 @@ def api_dividends(ticker: str):
 
 @app.route("/api/financials/<ticker>")
 def api_financials(ticker: str):
-    """Income statement + cash flow for one ticker."""
     ticker = ticker.upper()
     try:
         data = fetcher.get_financials(ticker)
@@ -184,18 +175,24 @@ def api_financials(ticker: str):
 
 @app.route("/api/calendar")
 def api_calendar():
-    """Dividend calendar — upcoming ex-dates across Oslo Børs."""
+    market = _get_market()
     try:
-        data = fetcher.get_dividend_calendar()
+        data = fetcher.get_dividend_calendar(market)
         return jsonify(data)
     except Exception as exc:
         logger.error("api_calendar error: %s", exc)
         return jsonify({"error": str(exc)}), 500
 
 
-# ════════════════════════════════════════════════════════════
+@app.route("/api/markets")
+def api_markets():
+    """Return market configuration for the frontend market switcher."""
+    return jsonify(MARKET_CONFIG)
+
+
+# ================================================================
 # Error handlers
-# ════════════════════════════════════════════════════════════
+# ================================================================
 
 @app.errorhandler(404)
 def not_found(e):
@@ -207,9 +204,9 @@ def server_error(e):
     return jsonify({"error": "Internal server error"}), 500
 
 
-# ════════════════════════════════════════════════════════════
+# ================================================================
 # Entry point
-# ════════════════════════════════════════════════════════════
+# ================================================================
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=5000)

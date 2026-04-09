@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Dividend Calendar — OsloBørsen{% endblock %}
+{% block title %}Dividend Calendar — Nordic Stock Analyzer{% endblock %}
 
 {% block content %}
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
@@ -10,7 +10,7 @@
       <div class="w-1 h-8 bg-brand-500 rounded-full"></div>
       <h1 class="text-3xl font-bold text-white tracking-tight">Dividend Calendar</h1>
     </div>
-    <p class="text-gray-400 ml-4 text-sm">Upcoming ex-dividend dates for Oslo Børs stocks</p>
+    <p id="cal-subtitle" class="text-gray-400 ml-4 text-sm">Upcoming ex-dividend dates</p>
   </div>
 
   <!-- ── Summary Stats ────────────────────────────────────── -->
@@ -101,8 +101,11 @@
 let calEvents = [];
 
 (async () => {
+  const mktCfg = marketSwitcher.getConfig();
+  document.getElementById('cal-subtitle').textContent =
+    `Upcoming ex-dividend dates for ${mktCfg.full} stocks`;
   try {
-    const res = await fetch('/api/calendar');
+    const res = await apiFetch('/api/calendar');
     calEvents = await res.json();
     if (!Array.isArray(calEvents)) calEvents = [];
   } catch(e) {

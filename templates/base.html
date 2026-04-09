@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>{% block title %}OsloBørsen — Norwegian Stock Analyzer{% endblock %}</title>
+  <title>{% block title %}OsloBørsen — Nordic Stock Analyzer{% endblock %}</title>
 
   <!-- Tailwind CSS (CDN) -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -72,19 +72,37 @@
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex items-center justify-between h-16">
 
-        <!-- Logo -->
-        <a href="/" class="flex items-center gap-2 group">
-          <div class="w-8 h-8 rounded-lg bg-brand-600 flex items-center justify-center shadow-lg shadow-brand-600/30 group-hover:shadow-brand-600/50 transition-shadow">
-            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" />
-            </svg>
+        <!-- Logo + Market Switcher -->
+        <div class="flex items-center gap-3">
+          <a href="/" class="flex items-center gap-2 group">
+            <div class="w-8 h-8 rounded-lg bg-brand-600 flex items-center justify-center shadow-lg shadow-brand-600/30 group-hover:shadow-brand-600/50 transition-shadow">
+              <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" />
+              </svg>
+            </div>
+            <div class="leading-tight">
+              <div id="brand-name" class="text-white font-bold text-sm tracking-tight">OsloBørsen</div>
+              <div class="text-gray-500 text-xs">Stock Analyzer</div>
+            </div>
+          </a>
+
+          <!-- Market Flag Switcher -->
+          <div id="market-switcher" class="hidden sm:flex items-center gap-1 ml-2 p-1 rounded-lg bg-surface-700 border border-surface-600">
+            <button class="market-flag-btn" data-market="NO" title="Oslo Børs (Norway)">
+              <span class="text-base leading-none">&#x1F1F3;&#x1F1F4;</span>
+            </button>
+            <button class="market-flag-btn" data-market="SE" title="Nasdaq Stockholm (Sweden)">
+              <span class="text-base leading-none">&#x1F1F8;&#x1F1EA;</span>
+            </button>
+            <button class="market-flag-btn" data-market="DK" title="Nasdaq Copenhagen (Denmark)">
+              <span class="text-base leading-none">&#x1F1E9;&#x1F1F0;</span>
+            </button>
+            <button class="market-flag-btn" data-market="FI" title="Nasdaq Helsinki (Finland)">
+              <span class="text-base leading-none">&#x1F1EB;&#x1F1EE;</span>
+            </button>
           </div>
-          <div class="leading-tight">
-            <div class="text-white font-bold text-sm tracking-tight">OsloBørsen</div>
-            <div class="text-gray-500 text-xs">Stock Analyzer</div>
-          </div>
-        </a>
+        </div>
 
         <!-- Desktop nav links -->
         <div class="hidden md:flex items-center gap-1">
@@ -130,6 +148,14 @@
         <a href="/screener"  class="mobile-nav-link {% if page=='screener'  %}mobile-nav-active{% endif %}">Screener</a>
         <a href="/calendar"  class="mobile-nav-link {% if page=='calendar'  %}mobile-nav-active{% endif %}">Dividends</a>
         <a href="/watchlist" class="mobile-nav-link {% if page=='watchlist' %}mobile-nav-active{% endif %}">Watchlist</a>
+        <!-- Mobile market switcher -->
+        <div class="flex items-center gap-2 mt-2 pt-2 border-t border-surface-600">
+          <span class="text-xs text-gray-500 mr-1">Market:</span>
+          <button class="market-flag-btn" data-market="NO" title="Norway"><span class="text-lg">&#x1F1F3;&#x1F1F4;</span></button>
+          <button class="market-flag-btn" data-market="SE" title="Sweden"><span class="text-lg">&#x1F1F8;&#x1F1EA;</span></button>
+          <button class="market-flag-btn" data-market="DK" title="Denmark"><span class="text-lg">&#x1F1E9;&#x1F1F0;</span></button>
+          <button class="market-flag-btn" data-market="FI" title="Finland"><span class="text-lg">&#x1F1EB;&#x1F1EE;</span></button>
+        </div>
       </div>
     </div>
   </nav>
@@ -168,16 +194,16 @@
                 d="M7 12l3-3 3 3 4-4" />
             </svg>
           </div>
-          <span class="text-sm font-medium text-white">OsloBørsen</span>
+          <span id="footer-brand" class="text-sm font-medium text-white">OsloBørsen</span>
         </div>
         <p class="text-xs text-gray-500 text-center">
           Data sourced from yfinance. For informational purposes only — not financial advice.
           Prices may be delayed up to 15 minutes.
         </p>
         <div class="flex items-center gap-4 text-xs text-gray-500">
-          <span>Oslo Børs / Euronext</span>
+          <span id="footer-exchange">Oslo Børs / Euronext</span>
           <span>·</span>
-          <span>NOK</span>
+          <span id="footer-currency">NOK</span>
         </div>
       </div>
     </div>

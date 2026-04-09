@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ stock_name }} ({{ ticker }}) — OsloBørsen{% endblock %}
+{% block title %}{{ stock_name }} ({{ ticker }}) — Nordic Stock Analyzer{% endblock %}
 
 {% block content %}
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in" id="stock-page" data-ticker="{{ ticker }}">
@@ -49,6 +49,7 @@
           <span id="watch-label">Watchlist</span>
         </button>
         <span id="recommendation-badge" class="hidden text-xs px-2 py-1 rounded-full border"></span>
+        <button class="tooltip-btn hidden" id="recommendation-tip" data-tip="recommendation">?</button>
       </div>
     </div>
   </div>
@@ -264,6 +265,8 @@ function populateHeader(d) {
     badge.className = `text-xs px-2 py-1 rounded-full border ${badgeCls}`;
     badge.textContent = d.recommendation;
     badge.classList.remove('hidden');
+    const tipBtn = document.getElementById('recommendation-tip');
+    if (tipBtn) tipBtn.classList.remove('hidden');
   }
 
   updateWatchButton();

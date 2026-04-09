@@ -260,6 +260,31 @@ html { scroll-behavior: smooth; }
   .card { border-radius: .75rem; }
 }
 
+/* ── Market flag switcher ───────────────────────────────── */
+.market-flag-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 1.75rem;
+  border-radius: .375rem;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  transition: background .15s, border-color .15s, transform .1s;
+  opacity: .6;
+}
+.market-flag-btn:hover {
+  background: #1c1c35;
+  opacity: 1;
+}
+.market-flag-active {
+  background: #1c1c35;
+  border-color: #4f46e5;
+  opacity: 1;
+  box-shadow: 0 0 8px rgba(79,70,229,.3);
+}
+
 /* ── Focus ring ─────────────────────────────────────────── */
 button:focus-visible,
 a:focus-visible,
