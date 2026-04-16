@@ -78,6 +78,7 @@ OSLO_STOCKS = [
     # Materials
     {"ticker": "NHY.OL",    "name": "Norsk Hydro",                "sector": "Materials"},
     {"ticker": "YAR.OL",    "name": "Yara International",         "sector": "Materials"},
+    {"ticker": "BRG.OL",    "name": "Borregaard",                 "sector": "Materials"},
 
     # Industrials
     {"ticker": "AKER.OL",   "name": "Aker ASA",                   "sector": "Industrials"},
